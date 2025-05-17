@@ -7,10 +7,19 @@ plugins {
 
 android {
     namespace = "com.example.talk2me_flutter_app"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // compileSdk = flutter.compileSdkVersion
+    compileSdk = 35
+    // ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973"
+
+    defaultConfig {
+        multiDexEnabled = true
+    }
 
     compileOptions {
+        // Flag to enable support for the new language APIs
+        isCoreLibraryDesugaringEnabled = true
+        // Sets Java compatibility to Java 11
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -21,7 +30,7 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.talk2me_flutter_app"
+        applicationId = "com.pranta.talk2me"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
@@ -37,6 +46,12 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+dependencies {
+    implementation("androidx.window:window:1.0.0")
+    implementation("androidx.window:window-java:1.0.0")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
 
 flutter {
