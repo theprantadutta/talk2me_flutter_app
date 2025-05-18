@@ -5,25 +5,210 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 
-import 'models/chat_message.dart';
-import 'services/mqtt_service.dart';
+import '../models/chat_message.dart';
+import '../services/mqtt_service.dart';
 
-class ChatPage extends StatefulWidget {
+class ChatScreen extends StatefulWidget {
   final String userId;
+  final String chatId;
+  final String? chatName;
+  final bool isGroupChat;
+  final List<String>? participants;
 
-  const ChatPage({required this.userId, super.key});
+  const ChatScreen({
+    required this.userId,
+    required this.chatId,
+    this.chatName,
+    this.isGroupChat = false,
+    this.participants,
+    super.key,
+  });
 
   @override
-  State<ChatPage> createState() => _ChatPageState();
+  State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
+class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
+  // late MqttService _mqttService;
+  // final List<ChatMessage> _messages = [];
+  // final TextEditingController _messageController = TextEditingController();
+  // final ScrollController _scrollController = ScrollController();
+  // late AnimationController _typingController;
+  // bool _isTyping = false;
+  // final Map<String, bool> _typingUsers = {};
+
+  // @override
+  // void initState() {
+  //   super.initState();
+  //   _mqttService = MqttService(userId: widget.userId);
+  //   _initMqtt();
+
+  //   // Initialize typing animation controller
+  //   _typingController = AnimationController(
+  //     vsync: this,
+  //     duration: const Duration(milliseconds: 600),
+  //   )..addStatusListener((status) {
+  //     if (status == AnimationStatus.completed) {
+  //       _typingController.reverse();
+  //     } else if (status == AnimationStatus.dismissed) {
+  //       _typingController.forward();
+  //     }
+  //   });
+  //   _typingController.forward();
+  // }
+
+  // Future<void> _initMqtt() async {
+  //   await _mqttService.connect();
+
+  //   // Subscribe to the chat topic - either direct chat or group chat
+  //   final topicName =
+  //       widget.isGroupChat ? 'group/${widget.chatId}' : 'chat/${widget.chatId}';
+
+  //   _mqttService.subscribe(topicName, (message, sender) {
+  //     if (widget.userId == sender) return;
+
+  //     // Show typing indicator briefly
+  //     setState(() {
+  //       _typingUsers[sender] = true;
+  //       _isTyping = true;
+  //     });
+
+  //     // Add message with delay for typing effect
+  //     Future.delayed(const Duration(milliseconds: 800), () {
+  //       if (mounted) {
+  //         setState(() {
+  //           _typingUsers[sender] = false;
+  //           _isTyping = _typingUsers.values.any((typing) => typing);
+  //           _messages.add(
+  //             ChatMessage(
+  //               message: message,
+  //               sender: sender,
+  //               timestamp: DateTime.now(),
+  //               isMe: sender == widget.userId,
+  //             ),
+  //           );
+  //         });
+  //         _scrollToBottom();
+  //       }
+  //     });
+  //   });
+
+  //   // For group chats, also subscribe to typing indicators
+  //   if (widget.isGroupChat) {
+  //     _mqttService.subscribe('group/${widget.chatId}/typing', (
+  //       message,
+  //       sender,
+  //     ) {
+  //       if (widget.userId == sender) return;
+
+  //       // Update typing status for this user
+  //       setState(() {
+  //         final isTyping = message == "typing";
+  //         _typingUsers[sender] = isTyping;
+  //         _isTyping = _typingUsers.values.any((typing) => typing);
+  //       });
+  //     });
+  //   }
+  // }
+
+  // Future<void> _sendMessage() async {
+  //   if (_messageController.text.isEmpty) return;
+
+  //   final message = _messageController.text;
+  //   final topicName =
+  //       widget.isGroupChat ? 'group/${widget.chatId}' : 'chat/${widget.chatId}';
+
+  //   setState(() {
+  //     _messages.add(
+  //       ChatMessage(
+  //         message: message,
+  //         sender: widget.userId,
+  //         timestamp: DateTime.now(),
+  //         isMe: true,
+  //       ),
+  //     );
+  //   });
+
+  //   await _mqttService.publish(topicName, message);
+  //   _messageController.clear();
+  //   _scrollToBottom();
+
+  //   // Stop typing indicator
+  //   if (widget.isGroupChat) {
+  //     await _mqttService.publish('group/${widget.chatId}/typing', "idle");
+  //   }
+  // }
+
+  // void _handleTyping(String text) {
+  //   if (widget.isGroupChat) {
+  //     // Send typing indicator to the group
+  //     _mqttService.publish(
+  //       'group/${widget.chatId}/typing',
+  //       text.isEmpty ? "idle" : "typing",
+  //     );
+  //   }
+  // }
+
+  // void _scrollToBottom() {
+  //   WidgetsBinding.instance.addPostFrameCallback((_) {
+  //     if (_scrollController.hasClients) {
+  //       _scrollController.animateTo(
+  //         _scrollController.position.maxScrollExtent,
+  //         duration: const Duration(milliseconds: 300),
+  //         curve: Curves.easeOut,
+  //       );
+  //     }
+  //   });
+  // }
+
+  // @override
+  // void dispose() {
+  //   // Clear typing indicator before leaving
+  //   if (widget.isGroupChat) {
+  //     _mqttService.publish('group/${widget.chatId}/typing', "idle");
+  //   }
+  //   _mqttService.disconnect();
+  //   _messageController.dispose();
+  //   _scrollController.dispose();
+  //   _typingController.dispose();
+  //   super.dispose();
+  // }
+
+  // String _getChatName() {
+  //   if (widget.isGroupChat) {
+  //     return widget.chatName ?? 'Group Chat';
+  //   } else {
+  //     return widget.chatId;
+  //   }
+  // }
+
+  // String _getTypingText() {
+  //   if (!_isTyping) return "Online";
+
+  //   if (widget.isGroupChat) {
+  //     final typingUsers =
+  //         _typingUsers.entries
+  //             .where((entry) => entry.value && entry.key != widget.userId)
+  //             .map((entry) => entry.key)
+  //             .toList();
+
+  //     if (typingUsers.isEmpty) return "Online";
+  //     if (typingUsers.length == 1) return "${typingUsers[0]} is typing...";
+  //     if (typingUsers.length == 2)
+  //       return "${typingUsers[0]} and ${typingUsers[1]} are typing...";
+  //     return "${typingUsers.length} people are typing...";
+  //   } else {
+  //     return "Typing...";
+  //   }
+  // }
+
   late MqttService _mqttService;
   final List<ChatMessage> _messages = [];
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   late AnimationController _typingController;
   bool _isTyping = false;
+  final Map<String, bool> _typingUsers = {};
 
   @override
   void initState() {
@@ -31,51 +216,121 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     _mqttService = MqttService(userId: widget.userId);
     _initMqtt();
 
-    // Initialize typing animation controller
     _typingController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
-    )..addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        _typingController.reverse();
-      } else if (status == AnimationStatus.dismissed) {
-        _typingController.forward();
-      }
-    });
+    )..addStatusListener(_handleAnimationStatus);
     _typingController.forward();
+  }
+
+  void _handleAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed) {
+      _typingController.reverse();
+    } else if (status == AnimationStatus.dismissed) {
+      _typingController.forward();
+    }
   }
 
   Future<void> _initMqtt() async {
     await _mqttService.connect();
-    _mqttService.subscribe('chat/demo', (message, sender) {
-      if (widget.userId == sender) return;
 
-      // Show typing indicator briefly
-      setState(() {
-        _isTyping = true;
+    // Subscribe to appropriate message topics
+    if (widget.isGroupChat) {
+      await _mqttService.subscribeToGroupMessages(widget.chatId, (
+        content,
+        senderId,
+      ) {
+        _handleIncomingMessage(content, senderId);
       });
+      await _mqttService.subscribeToGroupTypingIndicator(widget.chatId, (
+        groupId,
+        senderId,
+        isTyping,
+      ) {
+        _handleTypingIndicator(senderId, isTyping);
+      });
+    } else {
+      await _mqttService.subscribeToUserMessages(widget.chatId, (
+        content,
+        senderId,
+      ) {
+        _handleIncomingMessage(content, senderId);
+      });
+      await _mqttService.subscribeToTypingIndicator(widget.chatId, (
+        senderId,
+        isTyping,
+      ) {
+        _handleTypingIndicator(senderId, isTyping);
+      });
+    }
+  }
 
-      // Add message with delay for typing effect
-      Future.delayed(const Duration(milliseconds: 800), () {
-        if (mounted) {
-          setState(() {
-            _isTyping = false;
-            _messages.add(
-              ChatMessage(
-                message: message,
-                sender: sender,
-                timestamp: DateTime.now(),
-                isMe: sender == widget.userId,
-              ),
-            );
-          });
-          _scrollToBottom();
-        }
-      });
+  String _getChatName() {
+    if (widget.isGroupChat) {
+      return widget.chatName ?? 'Group Chat';
+    } else {
+      return widget.chatId;
+    }
+  }
+
+  String _getTypingText() {
+    if (!_isTyping) return "Online";
+
+    if (widget.isGroupChat) {
+      final typingUsers =
+          _typingUsers.entries
+              .where((entry) => entry.value && entry.key != widget.userId)
+              .map((entry) => entry.key)
+              .toList();
+
+      if (typingUsers.isEmpty) return "Online";
+      if (typingUsers.length == 1) return "${typingUsers[0]} is typing...";
+      if (typingUsers.length == 2) {
+        return "${typingUsers[0]} and ${typingUsers[1]} are typing...";
+      }
+      return "${typingUsers.length} people are typing...";
+    } else {
+      return "Typing...";
+    }
+  }
+
+  void _handleIncomingMessage(String content, String senderId) {
+    if (senderId == widget.userId) return;
+
+    setState(() {
+      _typingUsers[senderId] = true;
+      _isTyping = true;
+    });
+
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) {
+        setState(() {
+          _typingUsers[senderId] = false;
+          _isTyping = _typingUsers.values.any((typing) => typing);
+          _messages.add(
+            ChatMessage(
+              message: content,
+              sender: senderId,
+              timestamp: DateTime.now(),
+              isMe: senderId == widget.userId,
+            ),
+          );
+        });
+        _scrollToBottom();
+      }
+    });
+  }
+
+  void _handleTypingIndicator(String senderId, bool isTyping) {
+    if (senderId == widget.userId) return;
+    setState(() {
+      _typingUsers[senderId] = isTyping;
+      _isTyping = _typingUsers.values.any((typing) => typing);
     });
   }
 
   Future<void> _sendMessage() async {
+    print('Sending message: ${_messageController.text}');
     if (_messageController.text.isEmpty) return;
 
     final message = _messageController.text;
@@ -90,9 +345,37 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
       );
     });
 
-    await _mqttService.publish('chat/demo', message);
+    if (widget.isGroupChat) {
+      await _mqttService.sendGroupMessage(widget.chatId, message);
+    } else {
+      await _mqttService.sendUserMessage(widget.chatId, message);
+    }
+
     _messageController.clear();
     _scrollToBottom();
+    _sendTypingStatus(false);
+  }
+
+  void _handleTyping(String text) {
+    _sendTypingStatus(text.isNotEmpty);
+  }
+
+  void _sendTypingStatus(bool isTyping) {
+    if (widget.isGroupChat) {
+      _mqttService.sendGroupTypingIndicator(widget.chatId, isTyping);
+    } else {
+      _mqttService.sendTypingIndicator(widget.chatId, isTyping);
+    }
+  }
+
+  @override
+  void dispose() {
+    _sendTypingStatus(false);
+    _mqttService.disconnect();
+    _messageController.dispose();
+    _scrollController.dispose();
+    _typingController.dispose();
+    super.dispose();
   }
 
   void _scrollToBottom() {
@@ -105,15 +388,6 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
         );
       }
     });
-  }
-
-  @override
-  void dispose() {
-    _mqttService.disconnect();
-    _messageController.dispose();
-    _scrollController.dispose();
-    _typingController.dispose();
-    super.dispose();
   }
 
   @override
@@ -132,8 +406,8 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    Colors.blue[600]!.withValues(alpha: 0.9),
-                    Colors.blue[400]!.withValues(alpha: 0.85),
+                    Colors.purple.withValues(alpha: 0.9),
+                    Colors.blue.withValues(alpha: 0.85),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -149,19 +423,22 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
         title: Row(
           children: [
             Hero(
-              tag: 'profile-${widget.userId}',
-              child: CircleAvatar(
-                backgroundColor: Colors.white,
-                radius: 20,
-                child: Text(
-                  widget.userId.substring(0, 1).toUpperCase(),
-                  style: TextStyle(
-                    color: Colors.blue[600],
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-              ),
+              tag: 'profile-${widget.chatId}',
+              child:
+                  widget.isGroupChat
+                      ? _buildGroupAvatar()
+                      : CircleAvatar(
+                        backgroundColor: Colors.white,
+                        radius: 20,
+                        child: Text(
+                          widget.chatId.substring(0, 1).toUpperCase(),
+                          style: TextStyle(
+                            color: Colors.purple[600],
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                      ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -169,7 +446,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'MQTT Chat',
+                    _getChatName(),
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -177,7 +454,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                     ),
                   ),
                   Text(
-                    '${_isTyping ? "Typing..." : "Online"} • ${widget.userId}',
+                    '${_getTypingText()} ${widget.isGroupChat ? "• ${widget.participants?.length ?? 0} members" : ""}',
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.9),
                       fontSize: 12,
@@ -189,6 +466,14 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
           ],
         ),
         actions: [
+          if (widget.isGroupChat)
+            IconButton(
+              icon: const Icon(Icons.group, color: Colors.white),
+              onPressed: () {
+                // Show group info
+                _showGroupInfo();
+              },
+            ).animate().fadeIn(duration: 400.ms),
           IconButton(
             icon: const Icon(Icons.more_vert, color: Colors.white),
             onPressed: () {
@@ -236,6 +521,124 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     );
   }
 
+  Widget _buildGroupAvatar() {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.blue[100],
+        shape: BoxShape.circle,
+      ),
+      child:
+          widget.isGroupChat
+              ? Stack(
+                children: [
+                  Positioned(
+                    top: 5,
+                    left: 5,
+                    child: CircleAvatar(
+                      radius: 12,
+                      backgroundColor: Colors.purple[400],
+                      child: Text(
+                        widget.chatName?.substring(0, 1).toUpperCase() ?? 'G',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 5,
+                    right: 5,
+                    child: CircleAvatar(
+                      radius: 10,
+                      backgroundColor: Colors.green[400],
+                      child: const Icon(
+                        Icons.group,
+                        size: 12,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
+              )
+              : CircleAvatar(
+                backgroundColor: Colors.white,
+                radius: 20,
+                child: Text(
+                  widget.chatId.substring(0, 1).toUpperCase(),
+                  style: TextStyle(
+                    color: Colors.purple[600],
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+    );
+  }
+
+  void _showGroupInfo() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder:
+          (context) => Container(
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.only(
+                topLeft: Radius.circular(20),
+                topRight: Radius.circular(20),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  widget.chatName ?? 'Group Chat',
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${widget.participants?.length ?? 0} participants',
+                  style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                const Divider(),
+                if (widget.participants != null)
+                  ...widget.participants!.map(
+                    (participant) => ListTile(
+                      leading: CircleAvatar(
+                        child: Text(participant.substring(0, 1).toUpperCase()),
+                      ),
+                      title: Text(participant),
+                      subtitle: Text(
+                        participant == widget.userId ? 'You' : 'Member',
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+    );
+  }
+
   Widget _buildTypingIndicator() {
     return Align(
           alignment: Alignment.centerLeft,
@@ -269,7 +672,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                         height: 10,
                         width: 10,
                         decoration: BoxDecoration(
-                          color: Colors.blue[400],
+                          color: Colors.purple[400],
                           shape: BoxShape.circle,
                         ),
                         transform: Matrix4.translationValues(0, positionY, 0),
@@ -289,7 +692,9 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   Widget _buildMessageBubble(ChatMessage message, int index) {
     final isMe = message.isMe;
     final showSender =
-        !isMe && (index == 0 || _messages[index - 1].sender != message.sender);
+        widget.isGroupChat &&
+        !isMe &&
+        (index == 0 || _messages[index - 1].sender != message.sender);
     final isLastMessageFromSender =
         index == _messages.length - 1 ||
         _messages[index + 1].sender != message.sender;
@@ -363,7 +768,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                       gradient: LinearGradient(
                         colors:
                             isMe
-                                ? [Colors.blue[600]!, Colors.blue[400]!]
+                                ? [Colors.purple[600]!, Colors.blue[400]!]
                                 : [Colors.white, Colors.grey[50]!],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
@@ -380,7 +785,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                       ],
                     ),
                     padding: const EdgeInsets.symmetric(
-                      vertical: 12,
+                      vertical: 8,
                       horizontal: 16,
                     ),
                     margin: EdgeInsets.only(
@@ -417,7 +822,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                       Icon(
                         Icons.done_all,
                         size: 12,
-                        color: Colors.blue[400],
+                        color: Colors.purple[400],
                       ).animate().fadeIn(delay: 500.ms, duration: 300.ms),
                     ],
                   ],
@@ -478,6 +883,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                       textCapitalization: TextCapitalization.sentences,
                       keyboardType: TextInputType.multiline,
                       onSubmitted: (_) => _sendMessage(),
+                      onChanged: _handleTyping,
                     ),
                   ),
                   IconButton(
@@ -505,7 +911,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
                       gradient: LinearGradient(
                         colors:
                             hasText
-                                ? [Colors.blue[600]!, Colors.blue[400]!]
+                                ? [Colors.purple[600]!, Colors.blue[400]!]
                                 : [Colors.grey[400]!, Colors.grey[300]!],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
