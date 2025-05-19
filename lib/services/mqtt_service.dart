@@ -8,12 +8,9 @@ class MqttService {
   final String _clientId;
   final String _userId;
 
-  // Track subscriptions
+  // Track subscriptions and handlers
   final Set<String> _subscribedTopics = {};
-
-  // Typing indicators callbacks
-  final Map<String, Function(String, bool)> _typingCallbacks = {};
-  final Map<String, Function(String, String, bool)> _groupTypingCallbacks = {};
+  final Map<String, Function(String, String)> _topicHandlers = {};
 
   MqttService({required String userId})
     : _userId = userId,
@@ -21,7 +18,7 @@ class MqttService {
 
   Future<void> connect() async {
     _client = MqttServerClient('broker.hivemq.com', _clientId);
-    _client.port = 1883; // Default MQTT port
+    _client.port = 1883;
     _client.keepAlivePeriod = 60;
     _client.onDisconnected = _onDisconnected;
     _client.logging(on: false);
@@ -33,6 +30,30 @@ class MqttService {
     try {
       await _client.connect();
       print('MQTT Connected');
+
+      // Setup SINGLE listener for all messages
+      _client.updates!.listen((
+        List<MqttReceivedMessage<MqttMessage>> messages,
+      ) {
+        for (final msg in messages) {
+          final topic = msg.topic;
+          try {
+            final pubMsg = msg.payload as MqttPublishMessage;
+            final payload = MqttPublishPayload.bytesToStringAsString(
+              pubMsg.payload.message,
+            );
+
+            // Route message to correct handler
+            if (_topicHandlers.containsKey(topic)) {
+              print('Message received on topic: $topic');
+              print('Payload: $payload');
+              _topicHandlers[topic]!(payload, topic);
+            }
+          } catch (e) {
+            print('Error processing $topic message: $e');
+          }
+        }
+      });
     } catch (e) {
       print('MQTT Connection failed: $e');
       rethrow;
@@ -41,6 +62,8 @@ class MqttService {
 
   void _onDisconnected() {
     print('MQTT Disconnected');
+    _topicHandlers.clear();
+    _subscribedTopics.clear();
   }
 
   Future<void> subscribeToUserMessages(
@@ -70,11 +93,14 @@ class MqttService {
     Function(String, bool) onTyping,
   ) async {
     final topic = 'typing/$userId';
-    _typingCallbacks[topic] = onTyping;
     await _subscribe(topic, (payload, _) {
       final json = jsonDecode(payload) as Map<String, dynamic>;
-      print('Typing indicator: $json');
-      onTyping(json['senderId'], json['isTyping']);
+
+      // DECODE THE CONTENT FIELD
+      final contentJson =
+          jsonDecode(json['content'] as String) as Map<String, dynamic>;
+
+      onTyping(contentJson['senderId'], contentJson['isTyping']);
     });
   }
 
@@ -83,10 +109,18 @@ class MqttService {
     Function(String, String, bool) onTyping,
   ) async {
     final topic = 'group/$groupId/typing';
-    _groupTypingCallbacks[topic] = onTyping;
     await _subscribe(topic, (payload, _) {
       final json = jsonDecode(payload) as Map<String, dynamic>;
-      onTyping(json['groupId'], json['senderId'], json['isTyping']);
+
+      // DECODE THE CONTENT FIELD
+      final contentJson =
+          jsonDecode(json['content'] as String) as Map<String, dynamic>;
+
+      onTyping(
+        contentJson['groupId'],
+        contentJson['senderId'],
+        contentJson['isTyping'],
+      );
     });
   }
 
@@ -102,20 +136,7 @@ class MqttService {
 
     _client.subscribe(topic, MqttQos.atLeastOnce);
     _subscribedTopics.add(topic);
-
-    _client.updates!.listen((List<MqttReceivedMessage<MqttMessage>> messages) {
-      for (final msg in messages) {
-        try {
-          final pubMsg = msg.payload as MqttPublishMessage;
-          final payload = MqttPublishPayload.bytesToStringAsString(
-            pubMsg.payload.message,
-          );
-          handler(payload, msg.topic);
-        } catch (e) {
-          print('Error processing message: $e');
-        }
-      }
-    });
+    _topicHandlers[topic] = handler;
   }
 
   Future<void> sendUserMessage(String recipientId, String content) async {
@@ -167,55 +188,9 @@ class MqttService {
     _client.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
   }
 
-  Future<void> subscribe(
-    String topic,
-    Function(String, String) onMessage,
-  ) async {
-    if (_client.connectionStatus?.state != MqttConnectionState.connected) {
-      await connect();
-    }
-
-    _client.subscribe(topic, MqttQos.atLeastOnce);
-
-    _client.updates!.listen((List<MqttReceivedMessage<MqttMessage>> messages) {
-      for (final msg in messages) {
-        try {
-          final MqttPublishMessage pubMsg = msg.payload as MqttPublishMessage;
-          final payload = MqttPublishPayload.bytesToStringAsString(
-            pubMsg.payload.message,
-          );
-          final json = jsonDecode(payload) as Map<String, dynamic>;
-          // TODO: Update this
-          onMessage(json['content'], json['userId']);
-        } catch (e) {
-          print('Error processing message: $e');
-        }
-      }
-    });
-  }
-
-  Future<void> publish(String topic, String content) async {
-    if (_client.connectionStatus?.state != MqttConnectionState.connected) {
-      await connect();
-    }
-
-    final messageId = DateTime.now().millisecondsSinceEpoch.toString();
-    // _lastSentMessageId = messageId;
-
-    final message = {
-      'userId': _userId,
-      'messageId': messageId,
-      'content': content,
-      'timestamp': DateTime.now().toIso8601String(),
-    };
-
-    final builder = MqttClientPayloadBuilder();
-    builder.addString(jsonEncode(message));
-
-    _client.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
-  }
-
   void disconnect() {
     _client.disconnect();
+    _topicHandlers.clear();
+    _subscribedTopics.clear();
   }
 }
