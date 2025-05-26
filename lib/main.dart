@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:talk2me_flutter_app/screens/home_screen.dart';
+
+import 'screens/home_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -34,6 +35,7 @@ class MyApp extends StatelessWidget {
       ),
       // home: ChatScreen(userId: 'user_${Random().nextInt(10000)}'),
       home: HomeScreen(),
+      // home: const AuthScreen(),
     );
   }
 }
