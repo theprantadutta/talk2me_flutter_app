@@ -490,20 +490,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     builder: (context) {
                       final randomUser = 'user_${math.Random().nextInt(10000)}';
                       // For a one-on-one chat
-                      // return ChatScreen(
-                      //   userId: randomUser,
-                      //   chatId: "recipientUser456",
-                      //   isGroupChat: false,
-                      // );
-
-                      // For a group chat
                       return ChatScreen(
                         userId: randomUser,
-                        chatId: "groupId789",
-                        chatName: "Flutter Developers",
-                        isGroupChat: true,
-                        participants: [randomUser, "user456", "user789"],
+                        chatId: "recipientUser456",
+                        isGroupChat: false,
                       );
+
+                      // For a group chat
+                      // return ChatScreen(
+                      //   userId: randomUser,
+                      //   chatId: "groupId789",
+                      //   chatName: "Flutter Developers",
+                      //   isGroupChat: true,
+                      //   participants: [randomUser, "user456", "user789"],
+                      // );
                     },
                   ),
                 );

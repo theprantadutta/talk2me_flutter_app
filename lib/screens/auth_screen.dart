@@ -182,7 +182,12 @@ class _AuthScreenState extends State<AuthScreen> {
 
         const SizedBox(height: 20),
 
-        CustomButton(text: 'Login', onPressed: () {})
+        CustomButton(
+              text: 'Login',
+              onPressed: () {
+                // TODO: Handle Login
+              },
+            )
             .animate()
             .fade(duration: 500.ms, delay: 600.ms)
             .slideY(begin: 0.2, end: 0),
@@ -230,7 +235,12 @@ class _AuthScreenState extends State<AuthScreen> {
 
         const SizedBox(height: 20),
 
-        CustomButton(text: 'Create Account', onPressed: () {})
+        CustomButton(
+              text: 'Create Account',
+              onPressed: () {
+                // TODO: Handle Signup
+              },
+            )
             .animate()
             .fade(duration: 500.ms, delay: 700.ms)
             .slideY(begin: 0.2, end: 0),
