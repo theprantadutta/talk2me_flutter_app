@@ -43,3 +43,15 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Ignore Firebase Files
+**/GoogleService-Info.plist
+**/google-services.json
+**/firebase_options.dart
+
+# ignore .firebaserc for all examples
+**/.firebaserc
+firebase.json
+
+# Ignoring environment variables
+*.env

@@ -20,12 +20,15 @@ dependencies:
   iconsax: ^0.0.8
   google_fonts: ^6.2.1
   font_awesome_flutter: ^10.8.0
+  firebase_core: ^3.13.1
+  cloud_firestore: ^5.6.8
+  firebase_auth: ^5.5.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 # The following section is specific to Flutter packages.
 flutter:
