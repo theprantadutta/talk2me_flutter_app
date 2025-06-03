@@ -317,6 +317,13 @@ class _ChatScreenState extends State<ChatScreen> {
       appBar: _buildAppBar(),
       body: Container(
         color: AppColors.surface, // Background for the messages area
+        /// add a background image
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: AssetImage('assets/images/chat_bg.png'),
+            fit: BoxFit.cover,
+          ),
+        ),
         child: Column(
           children: [
             Expanded(child: _buildMessagesList()),

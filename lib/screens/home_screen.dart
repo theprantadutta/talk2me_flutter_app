@@ -594,15 +594,28 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'Talk2Me',
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              // Adjusted size
-              color: AppColors.primary, // Use primary color for branding
-              fontWeight: FontWeight.bold,
-              letterSpacing: 0.5,
-            ),
-          ).animate().fadeIn(delay: 100.ms, duration: 300.ms),
+          Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(5), // Softer radius
+                child: Image.asset(
+                  'assets/clean_logo.png',
+                  width: 24,
+                  height: 24,
+                ).animate().fadeIn(delay: 50.ms),
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Talk2Me',
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  // Adjusted size
+                  color: AppColors.primary, // Use primary color for branding
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.5,
+                ),
+              ).animate().fadeIn(delay: 100.ms, duration: 300.ms),
+            ],
+          ),
           Row(
             children: [
               IconButton(

@@ -1,11 +1,14 @@
 // lib/auth_screen.dart
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import '../app_colors.dart';
+import 'home_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -234,6 +237,129 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
+  Future<void> _handleGoogleSignIn() async {
+    if (isLoading) return; // Guard clause
+
+    setState(() {
+      isLoading = true;
+    });
+
+    try {
+      final GoogleSignInAccount? googleUser =
+          await GoogleSignIn(scopes: ['email', 'profile']).signIn();
+
+      if (googleUser == null) {
+        // User cancelled the sign-in
+        if (mounted) _showErrorSnackBar('Google Sign-In cancelled.');
+        return; // Exit if user cancelled
+      }
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      if (googleAuth.accessToken == null || googleAuth.idToken == null) {
+        if (mounted) {
+          _showErrorSnackBar(
+            'Failed to retrieve Google authentication tokens.',
+          );
+        }
+        return; // Exit if tokens are missing
+      }
+
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken, // Use ! as we've checked for null
+        idToken: googleAuth.idToken, // Use ! as we've checked for null
+      );
+
+      final UserCredential userCredential = await _auth.signInWithCredential(
+        credential,
+      );
+      final User? user = userCredential.user;
+
+      if (user == null) {
+        if (mounted) {
+          _showErrorSnackBar(
+            'Failed to sign in with Google. No user returned.',
+          );
+        }
+        return;
+      }
+
+      // **Crucial Step: Handle user data in Firestore**
+      // Check if the user exists in your Firestore 'users' collection.
+      // If not, create a new document. If yes, you might want to update 'lastSeen', etc.
+      final userDocRef = _firestore.collection('users').doc(user.uid);
+      final userDoc = await userDocRef.get();
+
+      if (!userDoc.exists) {
+        // New user, create their document in Firestore
+        await userDocRef.set({
+          'uid': user.uid,
+          'fullName':
+              user.displayName ?? 'Google User', // Use Google display name
+          'username':
+              user.email?.split('@').first ??
+              'googleuser_${user.uid.substring(0, 5)}', // Generate a username
+          'email': user.email ?? '',
+          'avatarUrl': user.photoURL ?? '', // Use Google photo URL
+          'createdAt': FieldValue.serverTimestamp(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'isOnline': true, // Set initial online status
+          'lastSeen': FieldValue.serverTimestamp(),
+        });
+      } else {
+        // Existing user, update their last seen or other relevant info
+        await userDocRef.update({
+          'lastSeen': FieldValue.serverTimestamp(),
+          'isOnline': true,
+          // Optionally update avatarUrl or fullName if they've changed in Google
+          if (user.displayName != null &&
+              user.displayName != userDoc.data()?['fullName'])
+            'fullName': user.displayName,
+          if (user.photoURL != null &&
+              user.photoURL != userDoc.data()?['avatarUrl'])
+            'avatarUrl': user.photoURL,
+        });
+      }
+
+      if (mounted) {
+        _showSuccessSnackBar('Google Sign-In successful!');
+        // Navigate to HomeScreen
+        Navigator.of(context).pushReplacement(
+          // Use pushReplacement to prevent going back to auth screen
+          MaterialPageRoute(
+            builder: (context) => HomeScreen(currentUserId: user.uid),
+          ),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'Google Sign-In failed.';
+      if (e.code == 'account-exists-with-different-credential') {
+        errorMessage =
+            'An account already exists with the same email address but different sign-in credentials. Try signing in using the original method.';
+      } else if (e.code == 'invalid-credential') {
+        errorMessage = 'Invalid Google credentials. Please try again.';
+      } else {
+        errorMessage = e.message ?? errorMessage;
+      }
+      if (mounted) _showErrorSnackBar(errorMessage);
+    } catch (e) {
+      if (kDebugMode) {
+        print('Google Sign-In error: $e');
+      }
+      if (mounted)
+        _showErrorSnackBar(
+          'An unexpected error occurred during Google Sign-In: ${e.toString()}',
+        );
+    } finally {
+      if (mounted) {
+        setState(() {
+          isLoading = false;
+        });
+      }
+    }
+  }
+
   void _showErrorSnackBar(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -270,17 +396,36 @@ class _AuthScreenState extends State<AuthScreen> {
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   // Logo
+                  // Container(
+                  //   height: 80,
+                  //   width: 80,
+                  //   decoration: BoxDecoration(
+                  //     // Gradient example
+                  //     gradient: LinearGradient(
+                  //       colors: [AppColors.primary, AppColors.primaryVariant],
+                  //       begin: Alignment.topLeft,
+                  //       end: Alignment.bottomRight,
+                  //     ),
+                  //     borderRadius: BorderRadius.circular(16), // Softer radius
+                  //     boxShadow: [
+                  //       BoxShadow(
+                  //         color: AppColors.primary.withOpacity(0.3),
+                  //         spreadRadius: 2,
+                  //         blurRadius: 8,
+                  //         offset: const Offset(0, 4),
+                  //       ),
+                  //     ],
+                  //   ),
+                  //   child: const Center(
+                  //     child: Icon(
+                  //       Icons.lock_outline_rounded,
+                  //       size: 40,
+                  //       color: AppColors.logoIcon,
+                  //     ),
+                  //   ),
+                  // ).animate().fade(duration: 400.ms).scale(delay: 200.ms),
                   Container(
-                    height: 80,
-                    width: 80,
                     decoration: BoxDecoration(
-                      // Gradient example
-                      gradient: LinearGradient(
-                        colors: [AppColors.primary, AppColors.primaryVariant],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(16), // Softer radius
                       boxShadow: [
                         BoxShadow(
                           color: AppColors.primary.withOpacity(0.3),
@@ -290,14 +435,15 @@ class _AuthScreenState extends State<AuthScreen> {
                         ),
                       ],
                     ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.lock_outline_rounded,
-                        size: 40,
-                        color: AppColors.logoIcon,
-                      ),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.asset(
+                        'assets/logo.png',
+                        height: 100,
+                        width: 100,
+                      ).animate().fade(duration: 400.ms).scale(delay: 200.ms),
                     ),
-                  ).animate().fade(duration: 400.ms).scale(delay: 200.ms),
+                  ),
 
                   const SizedBox(height: 24),
 
@@ -548,13 +694,7 @@ class _AuthScreenState extends State<AuthScreen> {
           text: 'Continue with Google',
           icon: FontAwesomeIcons.google, // Using the brand icon directly
           iconColor: AppColors.error, // Google's red, or keep it neutral
-          onPressed:
-              isLoading
-                  ? null
-                  : () {
-                    // TODO: Implement Google Sign In
-                    _showErrorSnackBar('Google Sign-In not implemented yet.');
-                  },
+          onPressed: isLoading ? null : _handleGoogleSignIn,
         ),
         // Example for Apple Sign In (requires font_awesome_flutter update for apple icon)
         // const SizedBox(height: 12),
