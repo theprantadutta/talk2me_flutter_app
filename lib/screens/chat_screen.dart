@@ -1,13 +1,14 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:flutter/foundation.dart'; // For mapEquals
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
-import 'package:talk2me_flutter_app/screens/home_screen.dart';
 
+import '../app_colors.dart';
 import '../models/chat_message.dart';
+import 'home_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String userId;
@@ -33,14 +34,12 @@ class _ChatScreenState extends State<ChatScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Timer? _typingTimer;
-  bool _isOverallTyping = false; // Overall typing status for the chat
-  final Map<String, bool> _usersTypingStatus = {}; // Tracks individual typers
-  Map<String, String> _participantDisplayNames =
-      {}; // For group chat sender names
+  bool _isOverallTyping = false;
+  final Map<String, bool> _usersTypingStatus = {};
+  Map<String, String> _participantDisplayNames = {};
   String _resolvedChatName = '';
-  String _currentUserDisplayName = ''; // Current user's display name
+  String _currentUserDisplayName = '';
 
-  // Corrected Paths
   String get _chatDocumentPath => 'chats/${widget.chatId}';
   String get _messagesCollectionPath => '$_chatDocumentPath/messages';
   String get _typingCollectionPath => '$_chatDocumentPath/typing';
@@ -56,9 +55,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     _listenToTypingStatus();
     _markMessagesAsRead();
-
-    // Listen to scroll events to mark more messages as read if needed (advanced)
-    // _scrollController.addListener(_onScroll);
   }
 
   Future<void> _loadCurrentUserData() async {
@@ -76,7 +72,9 @@ class _ChatScreenState extends State<ChatScreen> {
           _currentUserDisplayName = 'You';
         });
       }
-      print("Error loading current user's name: $e");
+      if (kDebugMode) {
+        print("Error loading current user's name: $e");
+      }
     }
   }
 
@@ -110,7 +108,7 @@ class _ChatScreenState extends State<ChatScreen> {
       WriteBatch batch = _firestore.batch();
       for (var doc in messagesSnapshot.docs) {
         final data = doc.data();
-        final readBy = (data['readBy'] as List?) ?? [];
+        final readBy = (data['readBy'] as List?)?.cast<String>() ?? [];
         if (!readBy.contains(widget.userId)) {
           batch.update(doc.reference, {
             'readBy': FieldValue.arrayUnion([widget.userId]),
@@ -132,21 +130,17 @@ class _ChatScreenState extends State<ChatScreen> {
       Map<String, bool> newTypingUsers = {};
       for (var doc in snapshot.docs) {
         if (doc.id != widget.userId) {
-          // Don't show self as typing
           final data = doc.data();
-          // Check if user is actively typing and timestamp is recent (e.g., within last 5 seconds)
           final isTyping = data['isTyping'] ?? false;
           final timestamp =
               (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime(1970);
           if (isTyping && DateTime.now().difference(timestamp).inSeconds < 5) {
             newTypingUsers[doc.id] = true;
           } else {
-            // Ensure user is removed if not typing or timestamp is old
             newTypingUsers[doc.id] = false;
           }
         }
       }
-      // Filter out those explicitly set to false
       newTypingUsers.removeWhere((key, value) => value == false);
 
       bool newOverallTypingState = newTypingUsers.values.any(
@@ -154,7 +148,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       bool changed = false;
 
-      if (!mapEquals(newTypingUsers, _usersTypingStatus.cast<String, bool>())) {
+      if (!mapEquals(newTypingUsers, _usersTypingStatus)) {
         _usersTypingStatus.clear();
         _usersTypingStatus.addAll(newTypingUsers);
         changed = true;
@@ -165,7 +159,7 @@ class _ChatScreenState extends State<ChatScreen> {
         changed = true;
       }
 
-      if (changed) {
+      if (changed && mounted) {
         setState(() {});
       }
     });
@@ -173,9 +167,8 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
-    // _scrollController.removeListener(_onScroll);
     if (mounted) {
-      _stopTyping(); // Ensure typing is stopped when screen is disposed
+      _stopTyping();
     }
     _messageController.dispose();
     _scrollController.dispose();
@@ -194,11 +187,10 @@ class _ChatScreenState extends State<ChatScreen> {
       await _firestore.collection(_messagesCollectionPath).add({
         'message': messageText,
         'sender': widget.userId,
-        'senderName': _currentUserDisplayName, // Store sender's name
+        'senderName': _currentUserDisplayName,
         'timestamp': FieldValue.serverTimestamp(),
-        'readBy': [widget.userId], // Sender has read it
+        'readBy': [widget.userId],
       });
-      // Update last message time on the chat document itself for ordering in HomeScreen
       await _firestore.doc(_chatDocumentPath).update({
         'lastMessage': messageText,
         'lastMessageTime': FieldValue.serverTimestamp(),
@@ -210,11 +202,18 @@ class _ChatScreenState extends State<ChatScreen> {
       if (kDebugMode) {
         print('Error sending message: $e');
       }
-      // Optionally, show a SnackBar to the user
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to send message: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to send message: ${e.toString()}'),
+            backgroundColor: AppColors.error,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            margin: const EdgeInsets.all(10),
+          ),
+        );
       }
     }
   }
@@ -231,14 +230,11 @@ class _ChatScreenState extends State<ChatScreen> {
   void _startTyping() {
     _firestore.collection(_typingCollectionPath).doc(widget.userId).set({
       'isTyping': true,
-      'timestamp':
-          FieldValue.serverTimestamp(), // Keep timestamp to prune old typing indicators
-      'userName':
-          _currentUserDisplayName, // Store name for group chat typing indicator
+      'timestamp': FieldValue.serverTimestamp(),
+      'userName': _currentUserDisplayName,
     });
     _typingTimer?.cancel();
     _typingTimer = Timer(const Duration(seconds: 3), () {
-      // Increased duration a bit
       if (mounted) _stopTyping();
     });
   }
@@ -255,7 +251,6 @@ class _ChatScreenState extends State<ChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
         if (isNewMessage || _scrollController.position.extentAfter < 200) {
-          // Only autoscroll if near bottom or new message
           _scrollController.animateTo(
             _scrollController.position.maxScrollExtent,
             duration: const Duration(milliseconds: 300),
@@ -268,29 +263,24 @@ class _ChatScreenState extends State<ChatScreen> {
 
   String _getAppBarTypingText() {
     if (!_isOverallTyping || _usersTypingStatus.isEmpty) {
-      return widget.isGroupChat
-          ? '${_participantDisplayNames.length} members'
-          : 'Online'; // Or last seen
+      // Fetch participant count for group chat subtitle if not typing
+      if (widget.isGroupChat) {
+        // This requires fetching participant count or storing it on the chat document
+        // For simplicity, using _participantDisplayNames.length which might not be fully updated initially
+        // A better approach would be to have a 'memberCount' field on the chat document.
+        return '${_participantDisplayNames.isNotEmpty ? _participantDisplayNames.length : "..."} members';
+      } else {
+        // For 1-on-1 chat, you might want to show online status or last seen
+        // This would require fetching the other user's status.
+        // For now, keeping it simple or you can add a StreamBuilder for the other user's status.
+        return 'Online'; // Placeholder
+      }
     }
 
     final typingDisplayNames =
         _usersTypingStatus.keys
-            .map(
-              (userId) =>
-                  _participantDisplayNames[userId] ??
-                  _usersTypingStatus[userId] ??
-                  'Someone',
-            )
-            .where(
-              (name) =>
-                  name != 'Someone' &&
-                  _usersTypingStatus[_usersTypingStatus.keys.firstWhere(
-                        (id) =>
-                            (_participantDisplayNames[id] ?? 'Someone') == name,
-                        orElse: () => '',
-                      )] ==
-                      true,
-            )
+            .map((userId) => _participantDisplayNames[userId] ?? 'Someone')
+            .where((name) => name != 'Someone') // Filter out unresolved names
             .toList();
 
     if (typingDisplayNames.isEmpty) {
@@ -307,14 +297,26 @@ class _ChatScreenState extends State<ChatScreen> {
     return "${typingDisplayNames.length} people are typing...";
   }
 
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(10),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA), // Page background
+      backgroundColor: AppColors.background, // Page background
       appBar: _buildAppBar(),
       body: Container(
-        // Added a container to give messages list a white background
-        color: Colors.white, // Background for the messages area
+        color: AppColors.surface, // Background for the messages area
         child: Column(
           children: [
             Expanded(child: _buildMessagesList()),
@@ -327,29 +329,30 @@ class _ChatScreenState extends State<ChatScreen> {
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-      elevation: 0.5, // Subtle elevation
-      backgroundColor: Colors.white,
+      elevation: 0.5,
+      backgroundColor: AppColors.surface, // Use surface color for AppBar
       leading: IconButton(
         icon: const Icon(
-          Icons.arrow_back_ios_new,
-          color: Color(0xFF2D3748),
-          size: 20,
+          Icons.arrow_back_ios_new_rounded,
+          color: AppColors.icon,
+          size: 22,
         ),
         onPressed: () => Navigator.pop(context),
+        tooltip: "Back",
       ),
       titleSpacing: 0,
       title: Row(
         children: [
           CircleAvatar(
             radius: 18,
-            backgroundColor: const Color(0xFF2D3748),
+            backgroundColor: AppColors.avatarBackground,
             child: Text(
               _resolvedChatName.isNotEmpty
                   ? _resolvedChatName.substring(0, 1).toUpperCase()
                   : "?",
               style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
+                color: AppColors.avatarText,
+                fontWeight: FontWeight.bold,
                 fontSize: 16,
               ),
             ),
@@ -364,17 +367,20 @@ class _ChatScreenState extends State<ChatScreen> {
                   _resolvedChatName,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Color(0xFF2D3748),
+                    color: AppColors.textPrimary,
                     fontWeight: FontWeight.w600,
-                    fontSize: 16,
+                    fontSize: 17,
                   ),
                 ),
+                // StreamBuilder for typing/subtitle for better real-time updates
+                // For simplicity, using the existing _getAppBarTypingText which updates via setState
                 Text(
                   _getAppBarTypingText(),
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Color(0xFF718096),
+                    color: AppColors.textSecondary,
                     fontSize: 12,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
               ],
@@ -383,67 +389,90 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
       actions: [
-        // IconButton( // Example for video call
-        //   icon: const Icon(Icons.videocam_outlined, color: Color(0xFF718096)),
-        //   onPressed: () { /* TODO: Implement */ },
-        // ),
-        // IconButton( // Example for audio call
-        //   icon: const Icon(Icons.call_outlined, color: Color(0xFF718096)),
-        //   onPressed: () { /* TODO: Implement */ },
+        // Example actions - customize as needed
+        // IconButton(
+        //   icon: const Icon(Icons.call_outlined, color: AppColors.icon, size: 22),
+        //   onPressed: () { _showErrorSnackBar('Call feature not implemented.'); },
+        //   tooltip: "Call",
         // ),
         PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert, color: Color(0xFF718096)),
+          icon: const Icon(
+            Icons.more_vert_rounded,
+            color: AppColors.icon,
+            size: 24,
+          ),
+          tooltip: "More options",
+          color: AppColors.surface, // Menu background
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           onSelected: (value) {
             if (value == 'create_group') {
               _showCreateGroupDialogFromChat();
             } else if (value == 'group_info') {
-              // TODO: Navigate to Group Info Screen or show dialog
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Group Info (Not Implemented)')),
-              );
+              _showErrorSnackBar('Group Info (Not Implemented)');
             } else if (value == 'view_contact') {
-              // TODO: Navigate to Contact Info Screen or show dialog
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('View Contact (Not Implemented)')),
-              );
+              _showErrorSnackBar('View Contact (Not Implemented)');
+            } else if (value == 'clear_chat') {
+              _showErrorSnackBar('Clear Chat (Not Implemented)');
             }
           },
           itemBuilder:
               (BuildContext context) => <PopupMenuEntry<String>>[
                 if (widget.isGroupChat)
-                  const PopupMenuItem<String>(
+                  PopupMenuItem<String>(
                     value: 'group_info',
-                    child: Text('Group Info'),
+                    child: Text(
+                      'Group Info',
+                      style: TextStyle(color: AppColors.textPrimary),
+                    ),
                   )
                 else
-                  const PopupMenuItem<String>(
+                  PopupMenuItem<String>(
                     value: 'view_contact',
-                    child: Text('View Contact'),
+                    child: Text(
+                      'View Contact',
+                      style: TextStyle(color: AppColors.textPrimary),
+                    ),
                   ),
-                const PopupMenuDivider(),
+                const PopupMenuDivider(height: 1),
+                PopupMenuItem<String>(
+                  value: 'clear_chat',
+                  child: Text(
+                    'Clear Chat',
+                    style: TextStyle(color: AppColors.textPrimary),
+                  ),
+                ),
                 const PopupMenuItem<String>(
+                  // Kept for consistency with home screen
                   value: 'create_group',
-                  child: Text('Create New Group'),
+                  child: Text(
+                    'Create New Group',
+                    style: TextStyle(color: AppColors.textPrimary),
+                  ),
                 ),
               ],
         ),
+        const SizedBox(width: 4), // Add some padding to the right of actions
       ],
     );
   }
 
   void _showCreateGroupDialogFromChat() {
-    // This uses the CreateGroupDialog from home_screen.dart
-    // Ensure it's either imported or moved to a shared location.
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext context) {
+        // Assuming CreateGroupDialog is defined in home_screen.dart and imported,
+        // or moved to a shared location.
         return CreateGroupDialog(
-          // Assuming CreateGroupDialog is accessible
           currentUserId: widget.userId,
           firestore: _firestore,
           onGroupCreated: (groupName, selectedUsersData) async {
-            // Copied from HomeScreen's _createGroupChat and adapted
-            if (groupName.isEmpty || selectedUsersData.isEmpty) return;
+            if (groupName.isEmpty || selectedUsersData.isEmpty) {
+              _showErrorSnackBar("Group name and members are required.");
+              return;
+            }
             final currentUserDoc =
                 await _firestore.collection('users').doc(widget.userId).get();
             final String currentUserName =
@@ -476,9 +505,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
             Navigator.of(context).pop(); // Close the dialog
 
-            // Navigate to the new group chat
             Navigator.pushReplacement(
-              // Use pushReplacement if you don't want to return to the current chat after creating new group from here
               context,
               MaterialPageRoute(
                 builder:
@@ -505,54 +532,61 @@ class _ChatScreenState extends State<ChatScreen> {
               .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return const Center(child: Text('Error loading messages.'));
+          return Center(
+            child: Text(
+              'Error loading messages.',
+              style: TextStyle(color: AppColors.textSecondary),
+            ),
+          );
         }
         if (!snapshot.hasData &&
             snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: Color(0xFF2D3748)),
+          return Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
           );
         }
         final messages = snapshot.data?.docs ?? [];
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (messages.isNotEmpty) {
-            _markMessagesAsRead(); // Mark newly loaded messages as read
+            _markMessagesAsRead();
           }
           _scrollToBottom();
         });
 
         return ListView.builder(
           controller: _scrollController,
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 16,
+          ), // Adjusted padding
           itemCount:
               messages.length +
               (_isOverallTyping &&
                       !_usersTypingStatus.containsKey(widget.userId)
                   ? 1
-                  : 0), // Add space for typing indicator
+                  : 0),
           itemBuilder: (context, index) {
             if (index == messages.length &&
                 _isOverallTyping &&
                 !_usersTypingStatus.containsKey(widget.userId)) {
               return _buildTypingIndicatorBubble();
             }
-            if (index >= messages.length) {
-              return const SizedBox.shrink(); // Should not happen
-            }
+            if (index >= messages.length) return const SizedBox.shrink();
 
             final messageDoc = messages[index];
             final messageData = messageDoc.data() as Map<String, dynamic>;
             final message = ChatMessage(
-              // Using your ChatMessage model
               message: messageData['message'] ?? '',
               sender: messageData['sender'] ?? '',
-              senderName: messageData['senderName'] ?? 'Unknown',
+              senderName:
+                  messageData['senderName'] ??
+                  _participantDisplayNames[messageData['sender']] ??
+                  'Unknown',
               timestamp:
                   (messageData['timestamp'] as Timestamp?)?.toDate() ??
                   DateTime.now(),
               isMe: messageData['sender'] == widget.userId,
-              // readBy: List<String>.from(messageData['readBy'] ?? []), // If needed by model
             );
             return _buildMessageBubble(message, index);
           },
@@ -562,41 +596,47 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildTypingIndicatorBubble() {
-    // Similar to a message bubble but for typing
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 12, top: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        margin: const EdgeInsets.only(
+          bottom: 12,
+          top: 4,
+          left: 4,
+        ), // Adjusted margin
+        padding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 10,
+        ), // Adjusted padding
         decoration: BoxDecoration(
-          color: const Color(0xFFF7FAFC),
+          color: AppColors.surfaceVariant, // Use surface variant
           borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(18),
             topRight: Radius.circular(18),
-            bottomLeft: Radius.circular(2),
+            bottomLeft: Radius.circular(4),
             bottomRight: Radius.circular(18),
           ),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(color: AppColors.border.withOpacity(0.7)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: List.generate(3, (dotIndex) {
             return Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                  width: 8,
-                  height: 8,
+                  margin: const EdgeInsets.symmetric(
+                    horizontal: 2.5,
+                  ), // Adjusted spacing
+                  width: 7,
+                  height: 7, // Slightly smaller
                   decoration: const BoxDecoration(
-                    color: Color(0xFF718096),
+                    color: AppColors.textSecondary,
                     shape: BoxShape.circle,
                   ),
                 )
                 .animate(
                   onPlay: (controller) => controller.repeat(reverse: true),
                 )
-                .scaleXY(end: 0.7, duration: 300.ms, delay: (dotIndex * 100).ms)
-                .then(
-                  delay: 600.ms - (dotIndex * 200).ms,
-                ); // Staggered pulsating effect
+                .scaleXY(end: 0.6, duration: 350.ms, delay: (dotIndex * 120).ms)
+                .then(delay: (700 - (dotIndex * 240)).ms);
           }),
         ),
       ),
@@ -611,35 +651,51 @@ class _ChatScreenState extends State<ChatScreen> {
           children: [
             if (widget.isGroupChat && !isMe)
               Padding(
-                padding: const EdgeInsets.only(left: 12.0, bottom: 2),
+                padding: EdgeInsets.only(
+                  left: isMe ? 0 : 16.0,
+                  bottom: 3,
+                  right: isMe ? 16 : 0,
+                ),
                 child: Text(
-                  message.senderName, // Use senderName from message data
+                  message.senderName,
                   style: const TextStyle(
-                    color: Color(0xFF718096),
+                    color: AppColors.textSecondary,
                     fontSize: 11,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
               ),
             Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              margin: EdgeInsets.only(
+                bottom: 10,
+                top: widget.isGroupChat && !isMe ? 0 : 4,
+              ), // Adjusted top margin
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 10,
+              ), // Adjusted padding
               constraints: BoxConstraints(
-                maxWidth: MediaQuery.of(context).size.width * 0.75,
-              ),
+                maxWidth: MediaQuery.of(context).size.width * 0.78,
+              ), // Slightly wider
               decoration: BoxDecoration(
-                color: isMe ? const Color(0xFF2D3748) : const Color(0xFFF7FAFC),
+                color: isMe ? AppColors.primary : AppColors.surfaceVariant,
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(18),
                   topRight: const Radius.circular(18),
-                  bottomLeft: Radius.circular(isMe ? 18 : 2),
-                  bottomRight: Radius.circular(isMe ? 2 : 18),
+                  bottomLeft: Radius.circular(
+                    isMe ? 18 : 4,
+                  ), // Pointed for received
+                  bottomRight: Radius.circular(
+                    isMe ? 4 : 18,
+                  ), // Pointed for sent
                 ),
                 border:
-                    isMe ? null : Border.all(color: const Color(0xFFE2E8F0)),
+                    isMe
+                        ? null
+                        : Border.all(color: AppColors.border.withOpacity(0.7)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.grey.withOpacity(0.08),
+                    color: Colors.black.withOpacity(0.04), // Softer shadow
                     spreadRadius: 1,
                     blurRadius: 3,
                     offset: const Offset(0, 1),
@@ -653,17 +709,23 @@ class _ChatScreenState extends State<ChatScreen> {
                   Text(
                     message.message,
                     style: TextStyle(
-                      color: isMe ? Colors.white : const Color(0xFF2D3748),
-                      fontSize: 15,
-                    ), // Slightly smaller text
+                      color:
+                          isMe
+                              ? AppColors.textOnPrimary
+                              : AppColors.textOnSurface,
+                      fontSize: 15.5,
+                    ), // Slightly larger
                   ),
                   const SizedBox(height: 5),
                   Text(
                     DateFormat('HH:mm').format(message.timestamp),
                     style: TextStyle(
-                      color: isMe ? Colors.white70 : const Color(0xFF718096),
-                      fontSize: 10,
-                    ), // Slightly smaller time
+                      color:
+                          isMe
+                              ? AppColors.textOnPrimary.withOpacity(0.7)
+                              : AppColors.textSecondary,
+                      fontSize: 10.5,
+                    ),
                   ),
                 ],
               ),
@@ -671,94 +733,96 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         )
         .animate()
-        .fadeIn(
-          duration: 250.ms,
-          delay: (50).ms,
-        ) // Simplified animation trigger
-        .slideX(begin: isMe ? 0.1 : -0.1, curve: Curves.easeOutQuart);
+        .fadeIn(duration: 250.ms, delay: (20).ms)
+        .slideX(begin: isMe ? 0.05 : -0.05, curve: Curves.easeOutCubic);
   }
 
   Widget _buildMessageInputArea() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 10,
+      ), // Adjusted padding
       decoration: BoxDecoration(
-        color: Colors.white, // Input area background
-        border: const Border(
-          top: BorderSide(color: Color(0xFFE2E8F0), width: 0.5),
-        ),
+        color: AppColors.surface, // Input area background
+        border: Border(top: BorderSide(color: AppColors.border, width: 0.5)),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.05),
+            color: Colors.black.withOpacity(0.04), // Softer shadow
             spreadRadius: 0,
-            blurRadius: 10,
+            blurRadius: 8,
             offset: const Offset(0, -2),
           ),
         ],
       ),
       child: SafeArea(
-        // Ensures input field is not obscured by system UI (e.g. home bar)
         child: Row(
+          crossAxisAlignment:
+              CrossAxisAlignment.end, // Align items to bottom for multiline
           children: [
-            // IconButton( // Optional: Attachment button
-            //   icon: Icon(Icons.attach_file, color: Color(0xFF718096)),
-            //   onPressed: () { /* TODO: Implement attachment */ },
+            // IconButton(
+            //   icon: Icon(Icons.add_circle_outline_rounded, color: AppColors.icon, size: 26),
+            //   onPressed: () { _showErrorSnackBar('Attachments not implemented.'); },
+            //   tooltip: "Attach file",
             // ),
+            // SizedBox(width: 4),
             Expanded(
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                ), // Padding inside the text field container
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 decoration: BoxDecoration(
-                  color: const Color(
-                    0xFFF7FAFC,
-                  ), // Light grey for text field background
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  color:
+                      AppColors
+                          .background, // Lighter grey for text field background
+                  borderRadius: BorderRadius.circular(24), // More rounded
+                  border: Border.all(color: AppColors.border.withOpacity(0.8)),
                 ),
                 child: TextField(
                   controller: _messageController,
                   style: const TextStyle(
-                    color: Color(0xFF2D3748),
-                    fontSize: 15,
+                    color: AppColors.textPrimary,
+                    fontSize: 15.5,
                   ),
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     hintText: 'Type a message...',
                     hintStyle: TextStyle(
-                      color: Color(0xFFA0AEC0),
-                      fontSize: 15,
+                      color: AppColors.textSecondary.withOpacity(0.8),
+                      fontSize: 15.5,
                     ),
                     border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(
-                      vertical: 10,
+                    contentPadding: const EdgeInsets.symmetric(
+                      vertical: 12,
                       horizontal: 0,
-                    ), // Adjust internal padding
+                    ), // Adjusted internal padding
                   ),
                   keyboardType: TextInputType.multiline,
                   minLines: 1,
-                  maxLines: 5, // Allow multiple lines
+                  maxLines: 5,
                   textCapitalization: TextCapitalization.sentences,
                   onChanged: _handleTypingChange,
-                  // onSubmitted: (_) => _sendMessage(), // Send on submit if desired (usually for physical keyboards)
                 ),
               ),
             ),
             const SizedBox(width: 8),
             Material(
-              // Send button with InkWell for ripple
-              color: const Color(0xFF2D3748),
+              color: AppColors.primary,
               shape: const CircleBorder(),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
-                splashColor: Colors.white24,
+                splashColor: AppColors.primaryVariant.withOpacity(0.5),
                 onTap: _sendMessage,
-                child: const Padding(
-                  padding: EdgeInsets.all(
-                    12.0,
-                  ), // Increased padding for easier tap
-                  child: Icon(Icons.send, color: Colors.white, size: 20),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Icon(
+                    Icons.send_rounded,
+                    color: AppColors.textOnPrimary,
+                    size: 22,
+                  ),
                 ),
               ),
-            ),
+            ).animate().scale(
+              delay: 100.ms,
+              duration: 200.ms,
+            ), // Subtle animation for send button
           ],
         ),
       ),
