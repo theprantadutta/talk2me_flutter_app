@@ -1,4 +1,5 @@
-// lib/auth_screen.dart
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -7,7 +8,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
-import '../app_colors.dart';
 import 'home_screen.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -40,7 +40,6 @@ class _AuthScreenState extends State<AuthScreen> {
     super.dispose();
   }
 
-  // Login function (logic unchanged)
   Future<void> _login() async {
     if (_emailController.text.trim().isEmpty ||
         _passwordController.text.isEmpty) {
@@ -53,43 +52,79 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      await _auth.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
+      // Attempt to sign in
+      final UserCredential userCredential = await _auth
+          .signInWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          );
 
-      if (mounted) {
-        _showSuccessSnackBar('Login successful!');
-        // Navigate to home screen or handle successful login
-        // Navigator.pushReplacementNamed(context, '/home');
+      // After successful Firebase sign-in, ensure user data exists in Firestore
+      final User? user = userCredential.user;
+      if (user != null) {
+        final userDocRef = _firestore.collection('users').doc(user.uid);
+        final userDoc = await userDocRef.get();
+
+        if (!userDoc.exists) {
+          // This case should ideally not happen if users are created correctly during signup.
+          // However, as a fallback, create a basic user profile.
+          String emailPrefix =
+              user.email?.split('@').first ??
+              'user_${user.uid.substring(0, 5)}';
+          await userDocRef.set({
+            'uid': user.uid,
+            'fullName':
+                user.displayName ??
+                _emailController.text.split('@').first, // Fallback name
+            'username': emailPrefix, // Fallback username
+            'email': user.email ?? _emailController.text.trim(),
+            'createdAt': FieldValue.serverTimestamp(),
+            'updatedAt': FieldValue.serverTimestamp(),
+            'isOnline': true,
+            'lastSeen': FieldValue.serverTimestamp(),
+          });
+        } else {
+          // User exists, update their online status and last seen
+          await userDocRef.update({
+            'isOnline': true,
+            'lastSeen': FieldValue.serverTimestamp(),
+          });
+        }
+
+        if (mounted) {
+          _showSuccessSnackBar('Login successful!');
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => HomeScreen(currentUserId: user.uid),
+            ),
+          );
+        }
+      } else {
+        if (mounted) _showErrorSnackBar('Login failed. User not found.');
       }
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'An error occurred';
-
       switch (e.code) {
         case 'user-not-found':
-          errorMessage = 'No user found with this email';
+          errorMessage = 'No user found with this email.';
           break;
         case 'wrong-password':
-          errorMessage = 'Incorrect password';
+          errorMessage = 'Incorrect password. Please try again.';
           break;
         case 'invalid-email':
-          errorMessage = 'Invalid email address';
+          errorMessage = 'The email address is not valid.';
           break;
         case 'user-disabled':
-          errorMessage = 'This account has been disabled';
+          errorMessage = 'This account has been disabled.';
           break;
         default:
-          errorMessage = e.message ?? 'Login failed';
+          errorMessage = e.message ?? 'Login failed. Please try again.';
       }
-
-      if (mounted) {
-        _showErrorSnackBar(errorMessage);
-      }
+      if (mounted) _showErrorSnackBar(errorMessage);
     } catch (e) {
-      if (mounted) {
+      if (kDebugMode) print("Login error: $e");
+      if (mounted)
         _showErrorSnackBar('An unexpected error occurred: ${e.toString()}');
-      }
     } finally {
       if (mounted) {
         setState(() {
@@ -99,7 +134,6 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  // Signup function (logic unchanged)
   Future<void> _signup() async {
     if (_fullNameController.text.trim().isEmpty ||
         _usernameController.text.trim().isEmpty ||
@@ -127,12 +161,8 @@ class _AuthScreenState extends State<AuthScreen> {
               .get();
 
       if (usernameQuery.docs.isNotEmpty) {
-        _showErrorSnackBar('Username already taken');
-        if (mounted) {
-          setState(() {
-            isLoading = false;
-          });
-        }
+        _showErrorSnackBar('Username already taken. Please choose another.');
+        if (mounted) setState(() => isLoading = false);
         return;
       }
 
@@ -150,45 +180,56 @@ class _AuthScreenState extends State<AuthScreen> {
         await _firestore.collection('users').doc(user.uid).set({
           'uid': user.uid,
           'fullName': _fullNameController.text.trim(),
-          'username': _usernameController.text.trim(),
+          'username':
+              _usernameController.text
+                  .trim()
+                  .toLowerCase(), // Store username in lowercase
           'email': _emailController.text.trim(),
+          'avatarUrl':
+              user.photoURL ??
+              '', // Store avatar if available (e.g., from social sign-up later)
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
+          'isOnline': true,
+          'lastSeen': FieldValue.serverTimestamp(),
         });
 
-        // Update display name
+        // Update display name in Firebase Auth profile
         await user.updateDisplayName(_fullNameController.text.trim());
+        // You could also update photoURL here if you have one at signup
 
         if (mounted) {
           _showSuccessSnackBar('Account created successfully!');
-          // Navigate to home screen or handle successful signup
-          // Navigator.pushReplacementNamed(context, '/home');
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => HomeScreen(currentUserId: user.uid),
+            ),
+          );
         }
+      } else {
+        if (mounted)
+          _showErrorSnackBar('Account creation failed. User not returned.');
       }
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'An error occurred';
-
       switch (e.code) {
         case 'weak-password':
-          errorMessage = 'The password provided is too weak';
+          errorMessage = 'The password provided is too weak.';
           break;
         case 'email-already-in-use':
-          errorMessage = 'An account already exists with this email';
+          errorMessage = 'An account already exists with this email.';
           break;
         case 'invalid-email':
-          errorMessage = 'Invalid email address';
+          errorMessage = 'The email address is not valid.';
           break;
         default:
-          errorMessage = e.message ?? 'Signup failed';
+          errorMessage = e.message ?? 'Signup failed. Please try again.';
       }
-
-      if (mounted) {
-        _showErrorSnackBar(errorMessage);
-      }
+      if (mounted) _showErrorSnackBar(errorMessage);
     } catch (e) {
-      if (mounted) {
+      if (kDebugMode) print("Signup error: $e");
+      if (mounted)
         _showErrorSnackBar('An unexpected error occurred: ${e.toString()}');
-      }
     } finally {
       if (mounted) {
         setState(() {
@@ -198,10 +239,9 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  // Reset password function (logic unchanged)
   Future<void> _resetPassword() async {
     if (_emailController.text.trim().isEmpty) {
-      _showErrorSnackBar('Please enter your email address');
+      _showErrorSnackBar('Please enter your email address to reset password.');
       return;
     }
 
@@ -209,27 +249,25 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       await _auth.sendPasswordResetEmail(email: _emailController.text.trim());
       if (mounted) {
-        _showSuccessSnackBar('Password reset email sent!');
+        _showSuccessSnackBar('Password reset email sent! Check your inbox.');
       }
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'An error occurred';
       switch (e.code) {
         case 'user-not-found':
-          errorMessage = 'No user found with this email';
+          errorMessage = 'No user found with this email.';
           break;
         case 'invalid-email':
-          errorMessage = 'Invalid email address';
+          errorMessage = 'The email address is not valid.';
           break;
         default:
-          errorMessage = e.message ?? 'Failed to send reset email';
+          errorMessage = e.message ?? 'Failed to send reset email.';
       }
-      if (mounted) {
-        _showErrorSnackBar(errorMessage);
-      }
+      if (mounted) _showErrorSnackBar(errorMessage);
     } catch (e) {
-      if (mounted) {
+      if (kDebugMode) print("Reset password error: $e");
+      if (mounted)
         _showErrorSnackBar('An unexpected error occurred: ${e.toString()}');
-      }
     } finally {
       if (mounted) {
         setState(() => isLoading = false);
@@ -238,7 +276,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _handleGoogleSignIn() async {
-    if (isLoading) return; // Guard clause
+    if (isLoading) return;
 
     setState(() {
       isLoading = true;
@@ -249,26 +287,24 @@ class _AuthScreenState extends State<AuthScreen> {
           await GoogleSignIn(scopes: ['email', 'profile']).signIn();
 
       if (googleUser == null) {
-        // User cancelled the sign-in
         if (mounted) _showErrorSnackBar('Google Sign-In cancelled.');
-        return; // Exit if user cancelled
+        return;
       }
 
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
 
       if (googleAuth.accessToken == null || googleAuth.idToken == null) {
-        if (mounted) {
+        if (mounted)
           _showErrorSnackBar(
             'Failed to retrieve Google authentication tokens.',
           );
-        }
-        return; // Exit if tokens are missing
+        return;
       }
 
       final AuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken, // Use ! as we've checked for null
-        idToken: googleAuth.idToken, // Use ! as we've checked for null
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
       );
 
       final UserCredential userCredential = await _auth.signInWithCredential(
@@ -277,42 +313,34 @@ class _AuthScreenState extends State<AuthScreen> {
       final User? user = userCredential.user;
 
       if (user == null) {
-        if (mounted) {
+        if (mounted)
           _showErrorSnackBar(
             'Failed to sign in with Google. No user returned.',
           );
-        }
         return;
       }
 
-      // **Crucial Step: Handle user data in Firestore**
-      // Check if the user exists in your Firestore 'users' collection.
-      // If not, create a new document. If yes, you might want to update 'lastSeen', etc.
       final userDocRef = _firestore.collection('users').doc(user.uid);
       final userDoc = await userDocRef.get();
 
       if (!userDoc.exists) {
-        // New user, create their document in Firestore
         await userDocRef.set({
           'uid': user.uid,
-          'fullName':
-              user.displayName ?? 'Google User', // Use Google display name
+          'fullName': user.displayName ?? 'Google User',
           'username':
               user.email?.split('@').first ??
-              'googleuser_${user.uid.substring(0, 5)}', // Generate a username
+              'googleuser_${user.uid.substring(0, 5)}',
           'email': user.email ?? '',
-          'avatarUrl': user.photoURL ?? '', // Use Google photo URL
+          'avatarUrl': user.photoURL ?? '',
           'createdAt': FieldValue.serverTimestamp(),
           'updatedAt': FieldValue.serverTimestamp(),
-          'isOnline': true, // Set initial online status
+          'isOnline': true,
           'lastSeen': FieldValue.serverTimestamp(),
         });
       } else {
-        // Existing user, update their last seen or other relevant info
         await userDocRef.update({
           'lastSeen': FieldValue.serverTimestamp(),
           'isOnline': true,
-          // Optionally update avatarUrl or fullName if they've changed in Google
           if (user.displayName != null &&
               user.displayName != userDoc.data()?['fullName'])
             'fullName': user.displayName,
@@ -324,9 +352,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
       if (mounted) {
         _showSuccessSnackBar('Google Sign-In successful!');
-        // Navigate to HomeScreen
         Navigator.of(context).pushReplacement(
-          // Use pushReplacement to prevent going back to auth screen
           MaterialPageRoute(
             builder: (context) => HomeScreen(currentUserId: user.uid),
           ),
@@ -336,17 +362,15 @@ class _AuthScreenState extends State<AuthScreen> {
       String errorMessage = 'Google Sign-In failed.';
       if (e.code == 'account-exists-with-different-credential') {
         errorMessage =
-            'An account already exists with the same email address but different sign-in credentials. Try signing in using the original method.';
+            'An account already exists with the same email address using a different sign-in method.';
       } else if (e.code == 'invalid-credential') {
-        errorMessage = 'Invalid Google credentials. Please try again.';
+        errorMessage = 'Invalid Google credentials.';
       } else {
         errorMessage = e.message ?? errorMessage;
       }
       if (mounted) _showErrorSnackBar(errorMessage);
     } catch (e) {
-      if (kDebugMode) {
-        print('Google Sign-In error: $e');
-      }
+      if (kDebugMode) print('Google Sign-In error: $e');
       if (mounted)
         _showErrorSnackBar(
           'An unexpected error occurred during Google Sign-In: ${e.toString()}',
@@ -365,8 +389,10 @@ class _AuthScreenState extends State<AuthScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: AppColors.error,
-        duration: const Duration(seconds: 3),
+        backgroundColor: Theme.of(context).colorScheme.error, // Use theme color
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(10),
       ),
     );
   }
@@ -376,119 +402,88 @@ class _AuthScreenState extends State<AuthScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: AppColors.success,
-        duration: const Duration(seconds: 3),
+        backgroundColor: Colors.green, // Or a success color from your theme
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        margin: const EdgeInsets.all(10),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context); // Get the current theme
+
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: theme.colorScheme.surface, // Use theme background
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.all(24.0), // Increased padding
+              padding: const EdgeInsets.all(24.0),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  // Logo
-                  // Container(
-                  //   height: 80,
-                  //   width: 80,
-                  //   decoration: BoxDecoration(
-                  //     // Gradient example
-                  //     gradient: LinearGradient(
-                  //       colors: [AppColors.primary, AppColors.primaryVariant],
-                  //       begin: Alignment.topLeft,
-                  //       end: Alignment.bottomRight,
-                  //     ),
-                  //     borderRadius: BorderRadius.circular(16), // Softer radius
-                  //     boxShadow: [
-                  //       BoxShadow(
-                  //         color: AppColors.primary.withOpacity(0.3),
-                  //         spreadRadius: 2,
-                  //         blurRadius: 8,
-                  //         offset: const Offset(0, 4),
-                  //       ),
-                  //     ],
-                  //   ),
-                  //   child: const Center(
-                  //     child: Icon(
-                  //       Icons.lock_outline_rounded,
-                  //       size: 40,
-                  //       color: AppColors.logoIcon,
-                  //     ),
-                  //   ),
-                  // ).animate().fade(duration: 400.ms).scale(delay: 200.ms),
                   Container(
                     decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withOpacity(0.3),
-                          spreadRadius: 2,
+                          color: theme.colorScheme.primary.withValues(
+                            alpha: 0.2,
+                          ),
+                          spreadRadius: 1,
                           blurRadius: 8,
-                          offset: const Offset(0, 4),
+                          offset: const Offset(0, 3),
                         ),
                       ],
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(16),
                       child: Image.asset(
+                        // Make sure this asset exists
                         'assets/logo.png',
                         height: 100,
                         width: 100,
+                        errorBuilder:
+                            (context, error, stackTrace) => Icon(
+                              Icons.lock_person_rounded,
+                              size: 80,
+                              color: theme.colorScheme.primary,
+                            ),
                       ).animate().fade(duration: 400.ms).scale(delay: 200.ms),
                     ),
                   ),
-
                   const SizedBox(height: 24),
-
-                  // Welcome Text
                   Text(
                     isLogin ? 'Welcome Back!' : 'Create Your Account',
-                    style: const TextStyle(
-                      fontSize: 26, // Slightly larger
-                      fontWeight: FontWeight.bold, // Bolder
-                      color: AppColors.textPrimary,
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: theme.colorScheme.onSurface,
                     ),
                   ).animate().fade(duration: 400.ms, delay: 300.ms),
-
                   const SizedBox(height: 8),
-
                   Text(
                     isLogin
                         ? 'Sign in to continue your journey.'
                         : 'Fill in the details to get started.',
                     textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 15, // Slightly larger
-                      color: AppColors.textSecondary,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: theme.hintColor,
                     ),
                   ).animate().fade(duration: 400.ms, delay: 400.ms),
-
                   const SizedBox(height: 32),
-
-                  // Form Fields
                   AnimatedSwitcher(
-                    duration: const Duration(
-                      milliseconds: 500,
-                    ), // Slightly longer for smoother slide
+                    duration: const Duration(milliseconds: 500),
                     transitionBuilder: (
                       Widget child,
                       Animation<double> animation,
                     ) {
                       final bool isNewChildLogin =
                           child.key == const ValueKey('login');
-
                       final offsetAnimation = Tween<Offset>(
-                        begin: Offset(
-                          isNewChildLogin ? -1.0 : 1.0,
-                          0.0,
-                        ), // Login from left, Signup from right
+                        begin: Offset(isNewChildLogin ? -1.0 : 1.0, 0.0),
                         end: Offset.zero,
                       ).animate(
                         CurvedAnimation(
@@ -496,33 +491,14 @@ class _AuthScreenState extends State<AuthScreen> {
                           curve: Curves.easeInOutCubic,
                         ),
                       );
-
-                      // Animate the outgoing child
-                      // We need to use a Stack and animate both children if we want them to slide simultaneously.
-                      // For simplicity, this will slide the new one in, and the old one will fade out (default for AnimatedSwitcher if not handled by layoutBuilder)
-                      // or use the reverse of the new child's animation.
-
                       return SlideTransition(
                         position: offsetAnimation,
                         child: FadeTransition(opacity: animation, child: child),
                       );
                     },
-                    // To make them slide past each other, you might need a Stack and control both animations.
-                    // The default layoutBuilder stacks them, which works okay with fade and slide.
-                    // layoutBuilder: (Widget? currentChild, List<Widget> previousChildren) {
-                    //   return Stack(
-                    //     alignment: Alignment.center,
-                    //     children: <Widget>[
-                    //       ...previousChildren.map((child) => FadeTransition(opacity:เด็ก(child.key as ValueKey<String>) == ValueKey('login') ? Tween(begin: 1.0, end: 0.0).animate(animation) : Tween(begin: 0.0, end: 1.0).animate(animation) , child: child)),
-                    //       if (currentChild != null) currentChild,
-                    //     ],
-                    //   );
-                    // },
                     child: isLogin ? _buildLoginForm() : _buildSignupForm(),
                   ),
-
-                  const SizedBox(height: 24), // Increased spacing
-                  // Switch between Login and Signup
+                  const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -530,9 +506,8 @@ class _AuthScreenState extends State<AuthScreen> {
                         isLogin
                             ? "Don't have an account? "
                             : "Already have an account? ",
-                        style: const TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 14,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.hintColor,
                         ),
                       ),
                       TextButton(
@@ -542,7 +517,6 @@ class _AuthScreenState extends State<AuthScreen> {
                                 : () {
                                   setState(() {
                                     isLogin = !isLogin;
-                                    // Clear controllers when switching
                                     _emailController.clear();
                                     _passwordController.clear();
                                     _fullNameController.clear();
@@ -553,16 +527,14 @@ class _AuthScreenState extends State<AuthScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          foregroundColor:
-                              AppColors
-                                  .primary, // Use primary color for the button text
+                          foregroundColor: theme.colorScheme.primary,
                         ),
                         child: Text(
                           isLogin ? "Sign Up" : "Login",
-                          style: const TextStyle(
-                            color: AppColors.primary, // Explicitly set color
-                            fontWeight: FontWeight.bold, // Bolder
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
                             fontSize: 14,
+                            color: theme.colorScheme.primary,
                           ),
                         ),
                       ),
@@ -577,9 +549,237 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  Future<void> _showPasswordResetDialog() async {
+    final theme = Theme.of(context);
+    final TextEditingController emailController = TextEditingController();
+    // Create a new GlobalKey for the form within the dialog
+    final GlobalKey<FormState> dialogFormKey = GlobalKey<FormState>();
+
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: !isLoading, // Prevent dismissing while loading
+      builder: (BuildContext dialogContext) {
+        // Use a StatefulBuilder to manage the isLoading state within the dialog
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: theme.dialogBackgroundColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              title: Text(
+                'Reset Password',
+                style: theme.textTheme.titleLarge?.copyWith(
+                  color: theme.colorScheme.onSurface,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: SingleChildScrollView(
+                child: ListBody(
+                  children: <Widget>[
+                    Text(
+                      'Enter your email address and we will send you a link to reset your password.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.hintColor,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Form(
+                      key: dialogFormKey,
+                      child: TextFormField(
+                        controller: emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        style: TextStyle(color: theme.colorScheme.onSurface),
+                        decoration: InputDecoration(
+                          labelText: 'Email Address',
+                          labelStyle: TextStyle(color: theme.hintColor),
+                          hintText: 'you@example.com',
+                          hintStyle: TextStyle(
+                            color: theme.hintColor.withValues(alpha: 0.7),
+                          ),
+                          prefixIcon: Icon(
+                            Icons.email_outlined,
+                            color: theme.iconTheme.color?.withValues(
+                              alpha: 0.7,
+                            ),
+                          ),
+                          filled: true,
+                          fillColor:
+                              theme.inputDecorationTheme.fillColor ??
+                              theme.colorScheme.surfaceContainerHighest,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: theme.colorScheme.primary,
+                              width: 1.5,
+                            ),
+                          ),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'Please enter your email address.';
+                          }
+                          if (!RegExp(
+                            r"^[a-zA-Z0-9.]+@[a-zA-Z0-9]+\.[a-zA-Z]+",
+                          ).hasMatch(value)) {
+                            return 'Please enter a valid email address.';
+                          }
+                          return null;
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              actions: <Widget>[
+                TextButton(
+                  onPressed:
+                      isLoading
+                          ? null
+                          : () => Navigator.of(dialogContext).pop(),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(
+                      color: theme.hintColor,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                ElevatedButton.icon(
+                  icon:
+                      isLoading
+                          ? Container(
+                            width: 18,
+                            height: 18,
+                            padding: const EdgeInsets.all(2.0),
+                            child: CircularProgressIndicator(
+                              color: theme.colorScheme.onPrimary,
+                              strokeWidth: 2,
+                            ),
+                          )
+                          : Icon(
+                            Icons.send_rounded,
+                            size: 18,
+                            color: theme.colorScheme.onPrimary,
+                          ),
+                  label: Text(
+                    'Send Link',
+                    style: TextStyle(color: theme.colorScheme.onPrimary),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: theme.colorScheme.primary,
+                    foregroundColor: theme.colorScheme.onPrimary,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                  ),
+                  onPressed:
+                      isLoading
+                          ? null
+                          : () async {
+                            if (dialogFormKey.currentState!.validate()) {
+                              // Use setDialogState to update the dialog's internal loading state
+                              setDialogState(() {
+                                isLoading =
+                                    true; // This isLoading should be local to the dialog or passed to it
+                              });
+                              // Call the main screen's reset password logic
+                              await _handlePasswordResetFromDialog(
+                                emailController.text.trim(),
+                                dialogContext,
+                                setDialogState,
+                              );
+                            }
+                          },
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      // Ensure isLoading on the main screen is reset if the dialog is dismissed by other means
+      // This might be redundant if _handlePasswordResetFromDialog always resets it,
+      // but good for safety.
+      if (mounted && isLoading) {
+        // Check isLoading of the AuthScreen's state
+        setState(() {
+          isLoading = false;
+        });
+      }
+    });
+  }
+
+  // Helper function to handle the actual password reset logic
+  // It takes setDialogState to manage the dialog's loading indicator
+  Future<void> _handlePasswordResetFromDialog(
+    String email,
+    BuildContext dialogContext,
+    StateSetter setDialogState,
+  ) async {
+    // No need to set isLoading = true here for the main screen's state,
+    // as the dialog is managing its own loading indicator via setDialogState.
+    // The main screen's isLoading is primarily for the main login/signup buttons.
+
+    try {
+      await _auth.sendPasswordResetEmail(email: email);
+      if (mounted) {
+        Navigator.of(dialogContext).pop(); // Close the dialog
+        _showSuccessSnackBar(
+          'Password reset email sent to $email! Check your inbox (and spam folder).',
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      String errorMessage = 'Failed to send reset email.';
+      switch (e.code) {
+        case 'user-not-found':
+          errorMessage = 'No user found with this email address.';
+          break;
+        case 'invalid-email':
+          errorMessage = 'The email address is not valid.';
+          break;
+        default:
+          errorMessage = e.message ?? errorMessage;
+      }
+      // Don't pop the dialog on error, so user can see the message or try again
+      if (mounted) {
+        _showErrorSnackBar(
+          errorMessage,
+        ); // Show error on the main screen's scaffold
+      }
+    } catch (e) {
+      if (kDebugMode) print("Password Reset Dialog error: $e");
+      if (mounted) {
+        _showErrorSnackBar('An unexpected error occurred: ${e.toString()}');
+      }
+    } finally {
+      // Reset the dialog's loading state
+      if (mounted) {
+        // Check if the main screen is still mounted
+        setDialogState(() {
+          isLoading = false; // Reset dialog's isLoading state
+        });
+        // Also ensure the main screen's isLoading is false if it was set by the dialog's button.
+        // This is tricky because the dialog has its own isLoading.
+        // The main _resetPassword function in AuthScreen should handle its own isLoading state.
+        // This dialog's isLoading is primarily for the "Send Link" button within the dialog.
+      }
+    }
+  }
+
   Widget _buildLoginForm() {
+    final theme = Theme.of(context);
     return Column(
-      key: const ValueKey('login'), // Important for AnimatedSwitcher
+      key: const ValueKey('login'),
       children: [
         CustomTextField(
           label: 'Email Address',
@@ -587,7 +787,7 @@ class _AuthScreenState extends State<AuthScreen> {
           controller: _emailController,
           keyboardType: TextInputType.emailAddress,
         ),
-        const SizedBox(height: 16), // Increased spacing
+        const SizedBox(height: 16),
         CustomTextField(
           label: 'Password',
           icon: Icons.lock_outline,
@@ -595,29 +795,32 @@ class _AuthScreenState extends State<AuthScreen> {
           controller: _passwordController,
         ),
         const SizedBox(height: 8),
-        Align(
-          alignment: Alignment.centerRight,
-          child: TextButton(
-            onPressed: isLoading ? null : _resetPassword,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              foregroundColor: AppColors.textSecondary,
-            ),
-            child: const Text(
-              'Forgot Password?',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+        GestureDetector(
+          onTap: _showPasswordResetDialog,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: isLoading ? null : _resetPassword,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                foregroundColor: theme.hintColor,
+              ),
+              child: Text(
+                'Forgot Password?',
+                style: TextStyle(color: theme.hintColor, fontSize: 13),
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 24), // Increased spacing
+        const SizedBox(height: 24),
         CustomButton(
           text: isLoading ? 'Logging in...' : 'Login',
           onPressed: isLoading ? null : _login,
           isLoading: isLoading,
         ),
-        const SizedBox(height: 24), // Increased spacing
+        const SizedBox(height: 24),
         _buildSocialLogin(),
       ],
     );
@@ -625,7 +828,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Widget _buildSignupForm() {
     return Column(
-      key: const ValueKey('signup'), // Important for AnimatedSwitcher
+      key: const ValueKey('signup'),
       children: [
         CustomTextField(
           label: 'Full Name',
@@ -636,7 +839,7 @@ class _AuthScreenState extends State<AuthScreen> {
         const SizedBox(height: 16),
         CustomTextField(
           label: 'Username',
-          icon: Icons.alternate_email_outlined, // More appropriate icon
+          icon: Icons.alternate_email_outlined,
           controller: _usernameController,
         ),
         const SizedBox(height: 16),
@@ -666,61 +869,53 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _buildSocialLogin() {
+    final theme = Theme.of(context);
     return Column(
       children: [
         Row(
           children: [
-            const Expanded(
-              child: Divider(thickness: 1, color: AppColors.border),
+            Expanded(
+              child: Divider(
+                thickness: 1,
+                color: theme.dividerColor.withValues(alpha: 0.2),
+              ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Text(
                 'OR',
-                style: TextStyle(
-                  color: AppColors.textSecondary.withOpacity(0.8),
-                  fontSize: 12,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: theme.hintColor.withValues(alpha: 0.8),
                   fontWeight: FontWeight.w500,
                 ),
               ),
             ),
-            const Expanded(
-              child: Divider(thickness: 1, color: AppColors.border),
+            Expanded(
+              child: Divider(
+                thickness: 1,
+                color: theme.dividerColor.withValues(alpha: 0.2),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: 20), // Increased spacing
+        const SizedBox(height: 20),
         SocialButton(
           text: 'Continue with Google',
-          icon: FontAwesomeIcons.google, // Using the brand icon directly
-          iconColor: AppColors.error, // Google's red, or keep it neutral
+          icon: FontAwesomeIcons.google,
+          // iconColor: theme.colorScheme.error, // Google's red, or let theme decide
           onPressed: isLoading ? null : _handleGoogleSignIn,
         ),
-        // Example for Apple Sign In (requires font_awesome_flutter update for apple icon)
-        // const SizedBox(height: 12),
-        // SocialButton(
-        //   text: 'Continue with Apple',
-        //   icon: FontAwesomeIcons.apple,
-        //   iconColor: AppColors.textPrimary,
-        //   onPressed: isLoading ? null : () {
-        //     // TODO: Implement Apple Sign In
-        //      _showErrorSnackBar('Apple Sign-In not implemented yet.');
-        //   },
-        // ),
       ],
     );
   }
 }
 
-// CustomTextField, CustomButton, SocialButton updated to use AppColors
-
 class CustomTextField extends StatefulWidget {
   final String label;
   final IconData icon;
   final bool obscureText;
-  final IconData?
-  suffixIcon; // Not used in current setup, but kept for flexibility
-  final VoidCallback? onSuffixIconPressed; // Not used
+  final IconData? suffixIcon;
+  final VoidCallback? onSuffixIconPressed;
   final TextEditingController? controller;
   final TextInputType? keyboardType;
   final TextCapitalization textCapitalization;
@@ -751,9 +946,11 @@ class _CustomTextFieldState extends State<CustomTextField> {
     super.initState();
     _isObscured = widget.obscureText;
     _focusNode.addListener(() {
-      setState(() {
-        _isFocused = _focusNode.hasFocus;
-      });
+      if (mounted) {
+        setState(() {
+          _isFocused = _focusNode.hasFocus;
+        });
+      }
     });
   }
 
@@ -766,20 +963,44 @@ class _CustomTextFieldState extends State<CustomTextField> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final inputDecorationTheme = theme.inputDecorationTheme;
+
     return AnimatedContainer(
       duration: const Duration(milliseconds: 200),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12), // Softer radius
+        color:
+            inputDecorationTheme.fillColor ??
+            theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(
+          inputDecorationTheme.border is OutlineInputBorder
+              ? (inputDecorationTheme.border as OutlineInputBorder)
+                  .borderRadius
+                  .topLeft
+                  .x
+              : 12,
+        ),
         border: Border.all(
-          color: _isFocused ? AppColors.primary : AppColors.border,
-          width: _isFocused ? 1.5 : 1,
+          color:
+              _isFocused
+                  ? theme.colorScheme.primary
+                  : (inputDecorationTheme.enabledBorder as OutlineInputBorder?)
+                          ?.borderSide
+                          .color ??
+                      theme.dividerColor.withValues(alpha: 0.2),
+          width:
+              _isFocused
+                  ? 1.5
+                  : (inputDecorationTheme.enabledBorder as OutlineInputBorder?)
+                          ?.borderSide
+                          .width ??
+                      1,
         ),
         boxShadow:
             _isFocused
                 ? [
                   BoxShadow(
-                    color: AppColors.primary.withOpacity(0.2),
+                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
@@ -792,21 +1013,27 @@ class _CustomTextFieldState extends State<CustomTextField> {
         obscureText: _isObscured,
         keyboardType: widget.keyboardType,
         textCapitalization: widget.textCapitalization,
-        style: const TextStyle(color: AppColors.textOnSurface, fontSize: 15),
+        style: theme.textTheme.bodyLarge?.copyWith(
+          color: theme.colorScheme.onSurface,
+        ),
         decoration: InputDecoration(
-          contentPadding: const EdgeInsets.symmetric(
-            vertical: 16,
-            horizontal: 16,
-          ),
-          border: InputBorder.none,
+          contentPadding:
+              inputDecorationTheme.contentPadding ??
+              const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+          border: InputBorder.none, // Handled by container
           hintText: widget.label,
-          hintStyle: TextStyle(
-            color: AppColors.textSecondary.withOpacity(0.7),
-            fontSize: 14,
-          ),
+          hintStyle:
+              inputDecorationTheme.hintStyle ??
+              TextStyle(
+                color: theme.hintColor.withValues(alpha: 0.7),
+                fontSize: 14,
+              ),
           prefixIcon: Icon(
             widget.icon,
-            color: _isFocused ? AppColors.primary : AppColors.icon,
+            color:
+                _isFocused
+                    ? theme.colorScheme.primary
+                    : theme.iconTheme.color?.withValues(alpha: 0.7),
             size: 20,
           ),
           suffixIcon: _buildSuffixIcon(),
@@ -816,13 +1043,17 @@ class _CustomTextFieldState extends State<CustomTextField> {
   }
 
   Widget? _buildSuffixIcon() {
+    final theme = Theme.of(context);
     if (widget.obscureText) {
       return IconButton(
         icon: Icon(
           _isObscured
               ? Icons.visibility_off_outlined
               : Icons.visibility_outlined,
-          color: _isFocused ? AppColors.primary : AppColors.icon,
+          color:
+              _isFocused
+                  ? theme.colorScheme.primary
+                  : theme.iconTheme.color?.withValues(alpha: 0.7),
           size: 20,
         ),
         onPressed: () {
@@ -832,11 +1063,13 @@ class _CustomTextFieldState extends State<CustomTextField> {
         },
       );
     } else if (widget.suffixIcon != null) {
-      // Kept for future use
       return IconButton(
         icon: Icon(
           widget.suffixIcon,
-          color: _isFocused ? AppColors.primary : AppColors.icon,
+          color:
+              _isFocused
+                  ? theme.colorScheme.primary
+                  : theme.iconTheme.color?.withValues(alpha: 0.7),
           size: 20,
         ),
         onPressed: widget.onSuffixIconPressed,
@@ -860,36 +1093,37 @@ class CustomButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return SizedBox(
       width: double.infinity,
-      height: 52, // Slightly taller
+      height: 52,
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.primary,
-          foregroundColor: AppColors.textOnPrimary,
+          backgroundColor: theme.colorScheme.primary,
+          foregroundColor: theme.colorScheme.onPrimary,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-          ), // Softer radius
-          elevation: onPressed == null ? 0 : 2, // Subtle elevation
-          shadowColor: AppColors.primary.withOpacity(0.5),
-          padding: const EdgeInsets.symmetric(vertical: 14), // Adjusted padding
+          ),
+          elevation: onPressed == null ? 0 : 2,
+          shadowColor: theme.colorScheme.primary.withValues(alpha: 0.5),
+          padding: const EdgeInsets.symmetric(vertical: 14),
         ),
         child:
             isLoading
-                ? const SizedBox(
-                  height: 22, // Adjusted size
-                  width: 22, // Adjusted size
+                ? SizedBox(
+                  height: 22,
+                  width: 22,
                   child: CircularProgressIndicator(
-                    color: AppColors.textOnPrimary,
-                    strokeWidth: 2.5, // Slightly thicker
+                    color: theme.colorScheme.onPrimary,
+                    strokeWidth: 2.5,
                   ),
                 )
                 : Text(
                   text,
-                  style: const TextStyle(
-                    fontSize: 16, // Slightly larger
-                    fontWeight: FontWeight.w600, // Bolder
+                  style: theme.textTheme.labelLarge?.copyWith(
+                    color: theme.colorScheme.onPrimary,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
       ),
@@ -900,7 +1134,7 @@ class CustomButton extends StatelessWidget {
 class SocialButton extends StatelessWidget {
   final String text;
   final IconData icon;
-  final Color? iconColor; // Allow custom icon color
+  final Color? iconColor; // Allow custom icon color, but prefer theme
   final VoidCallback? onPressed;
 
   const SocialButton({
@@ -913,34 +1147,44 @@ class SocialButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    // Determine icon color: use provided, then try to infer from brand, then fallback to theme.
+    Color finalIconColor;
+    if (iconColor != null) {
+      finalIconColor = iconColor!;
+    } else if (icon == FontAwesomeIcons.google) {
+      // Google's red is often #DB4437 or similar.
+      // You might want to define specific brand colors in your theme if you use them often.
+      finalIconColor = const Color(0xFFDB4437); // Example Google Red
+    } else {
+      finalIconColor =
+          theme.colorScheme.primary; // Default to primary theme color
+    }
+
     return SizedBox(
       width: double.infinity,
-      height: 52, // Slightly taller
+      height: 52,
       child: ElevatedButton.icon(
         onPressed: onPressed,
-        icon: FaIcon(
-          icon,
-          color: iconColor ?? AppColors.primary, // Use primary if not specified
-          size: 18,
-        ),
+        icon: FaIcon(icon, color: finalIconColor, size: 18),
         label: Text(
           text,
-          style: const TextStyle(
-            color:
-                AppColors
-                    .textPrimary, // Darker text for better contrast on white
-            fontSize: 15,
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: theme.colorScheme.onSurface,
             fontWeight: FontWeight.w500,
           ),
         ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppColors.surface,
-          foregroundColor: AppColors.textPrimary, // For ripple effect
+          backgroundColor: theme.colorScheme.surface,
+          foregroundColor: theme.colorScheme.onSurface, // For ripple effect
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12), // Softer radius
-            side: BorderSide(color: AppColors.border, width: 1),
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(
+              color: theme.dividerColor.withValues(alpha: 0.2),
+              width: 1,
+            ),
           ),
-          elevation: 0, // Flat design
+          elevation: 0,
           padding: const EdgeInsets.symmetric(vertical: 14),
         ),
       ),

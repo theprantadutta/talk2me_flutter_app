@@ -1,62 +1,3 @@
-// import 'package:flutter/material.dart';
-
-// class AppColors {
-//   static const Color primary = Color(0xFF007BFF); // Vibrant Blue
-//   static const Color primaryVariant = Color(0xFF0056b3); // Darker Blue
-//   static const Color secondary = Color(0xFFFF8C00); // Dark Orange (for accents)
-
-//   static const Color background = Color(0xFFF8F9FA); // Very Light Grey
-//   static const Color surface = Color(
-//     0xFFFFFFFF,
-//   ); // White (for cards, text fields)
-//   static const Color surfaceVariant = Color(
-//     0xFFF1F3F5,
-//   ); // Slightly darker white/grey for selected items or hover
-
-//   static const Color error = Color(0xFFDC3545); // Standard Red
-//   static const Color success = Color(0xFF28A745); // Standard Green
-
-//   static const Color textPrimary = Color(0xFF212529); // Almost Black
-//   static const Color textSecondary = Color(0xFF6C757D); // Grey
-//   static const Color textOnPrimary = Color(
-//     0xFFFFFFFF,
-//   ); // Text on primary color background
-//   static const Color textOnSurface = Color(
-//     0xFF212529,
-//   ); // Text on surface color background
-
-//   static const Color icon = Color(0xFF495057); // Darker Grey for icons
-//   static const Color iconOnPrimary = Color(
-//     0xFFFFFFFF,
-//   ); // Icons on primary color background
-
-//   static const Color border = Color(0xFFDEE2E6); // Light Grey for borders
-//   static const Color borderFocused = primary;
-
-//   // Specific UI elements
-//   static const Color onlineIndicator = success;
-//   static const Color offlineIndicator = textSecondary;
-//   static const Color unreadBadgeBackground = primary;
-//   static const Color unreadBadgeText = textOnPrimary;
-//   static const Color avatarBackground = primary;
-//   static const Color avatarText = textOnPrimary;
-
-//   static const Color appBarBackground = surface;
-//   static const Color searchBarBackground = surface;
-//   static const Color mainContentBackground = surface;
-//   static const Color dialogBackground = surface;
-//   static const Color fabBackground = primary;
-//   static const Color fabIcon = textOnPrimary;
-
-//   static const Color listItemSelected =
-//       primaryVariant; // Example for selected items
-//   static const Color listItemUnselected = surface;
-
-//   // Specific UI elements if needed
-//   static const Color logoBackground = primary;
-//   static const Color logoIcon = textOnPrimary;
-// }
-
 import 'package:flutter/material.dart';
 
 class AppColors {
@@ -121,6 +62,78 @@ class AppColors {
   static const Color highlight = Color(0x15008080); // Primary with 8% opacity
   static const Color splash = Color(0x1A008080); // Primary with 10% opacity
   static const Color divider = Color(0xFFECF0F1);
+
+  // Specific UI elements if needed
+  static const Color logoBackground = primary;
+  static const Color logoIcon = textOnPrimary;
+}
+
+class AppColorsDark {
+  // Primary Colors (Teal - slightly lighter for dark theme)
+  static const Color primary = Color(
+    0xFF00A0A0,
+  ); // Brighter Teal for visibility
+  static const Color primaryVariant = Color(
+    0xFF008080,
+  ); // Original teal becomes variant
+  static const Color secondary = Color(0xFFFF7B4D); // Slightly lighter orange
+  static const Color tertiary = Color(0xFF7D5FA8); // Lighter purple
+
+  // Background & Surface Colors
+  static const Color background = Color(0xFF121212); // Dark grey
+  static const Color surface = Color(0xFF1E1E1E); // Slightly lighter dark
+  static const Color surfaceVariant = Color(0xFF252525); // Even lighter dark
+
+  // Status Colors (more vibrant for dark theme)
+  static const Color error = Color(0xFFFF6659); // Brighter red
+  static const Color success = Color(0xFF4CD964); // Brighter green
+  static const Color warning = Color(0xFFFFCC00); // Brighter yellow
+  static const Color info = Color(0xFF5AC8FA); // Brighter blue
+
+  // Text Colors
+  static const Color textPrimary = Color(0xFFE1E1E1); // Light grey
+  static const Color textSecondary = Color(0xFFA0A0A0); // Medium grey
+  // static const Color textOnPrimary = Color(0xFF000000); // Black on primary
+  static const Color textOnPrimary = Color(0xFFFFFFFF); // Black on primary
+  static const Color textOnSurface = Color(0xFFE1E1E1);
+
+  // Icon Colors (darker in light areas, lighter in dark areas)
+  static const Color icon = Color(0xFFB0B0B0); // Light grey for dark bg
+  static const Color iconOnPrimary = Color(0xFF000000); // Dark icons on primary
+
+  // Border Colors
+  static const Color border = Color(0xFF333333); // Dark grey
+  static const Color borderFocused = primary;
+
+  // UI Elements
+  static const Color onlineIndicator = success;
+  static const Color offlineIndicator = Color(0xFF666666);
+  static const Color unreadBadgeBackground = secondary;
+  static const Color unreadBadgeText = textOnPrimary;
+  static const Color avatarBackground = primaryVariant;
+  static const Color avatarText = textOnPrimary;
+
+  // Component Colors
+  static const Color appBarBackground = surface;
+  static const Color searchBarBackground = Color(0xFF2A2A2A);
+  static const Color mainContentBackground = background;
+  static const Color dialogBackground = surface;
+  static const Color fabBackground = primary;
+  static const Color fabIcon = textOnPrimary;
+
+  // List Items
+  static const Color listItemSelected = Color(0xFF2D3E3E); // Dark teal tint
+  static const Color listItemUnselected = surface;
+
+  // Additional Colors
+  static const Color highlight = Color(0x1A00A0A0); // Primary with 10% opacity
+  static const Color splash = Color(0x3300A0A0); // Primary with 20% opacity
+  static const Color divider = Color(0xFF333333);
+
+  // Darker Icons Variants
+  static const Color iconDark = Color(0xFF8E8E8E); // For less important icons
+  static const Color iconDarker = Color(0xFF757575); // For disabled icons
+  static const Color iconDarkest = Color(0xFF5E5E5E); // For very subtle icons
 
   // Specific UI elements if needed
   static const Color logoBackground = primary;

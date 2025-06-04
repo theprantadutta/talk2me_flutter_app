@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+const String kIsDarkModeKey = 'isDarkMode';
+
 LinearGradient getDefaultGradient(Color mainHelper, Color helperColor) =>
     LinearGradient(
       begin: Alignment.topLeft,

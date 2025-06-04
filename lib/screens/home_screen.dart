@@ -4,10 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
-import 'package:talk2me_flutter_app/screens/auth_screen.dart';
 
-import '../app_colors.dart';
+import 'auth_screen.dart';
 import 'chat_screen.dart';
+import 'settings_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String currentUserId;
@@ -230,7 +230,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: AppColors.error,
+        backgroundColor: Theme.of(context).colorScheme.error,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         margin: const EdgeInsets.all(10),
@@ -239,21 +239,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildChatList() {
+    final theme = Theme.of(context);
     return StreamBuilder<QuerySnapshot>(
       stream: _getChatsStream(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return const Center(
+          return Center(
             child: Text(
               'Error loading chats',
-              style: TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: theme.hintColor),
             ),
           );
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: AppColors.primary),
+          return Center(
+            child: CircularProgressIndicator(color: theme.colorScheme.primary),
           );
         }
 
@@ -264,27 +265,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
+                Icon(
                   Icons.chat_bubble_outline_rounded,
                   size: 64,
-                  color: AppColors.icon,
+                  color: theme.iconTheme.color?.withValues(alpha: 0.7),
                 ),
                 const SizedBox(height: 16),
-                const Text(
+                Text(
                   'No Conversations Yet',
-                  style: TextStyle(
-                    color: AppColors.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Tap the + button to start a new chat or group.',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 14,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.hintColor,
                   ),
                 ),
               ],
@@ -379,7 +377,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         isGroupChat: isGroupChat,
                         chatDisplayName: chatDisplayName,
                         avatarLetter: avatarLetter,
-                        isOnline: false,
+                        isOnline:
+                            false, // Groups don't have a single online status like this
                         index: index,
                       );
                     }
@@ -442,21 +441,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     Function(Map<String, dynamic> userData, bool isSelected)? onUserTap,
     List<String>? initiallySelectedUserIds,
   }) {
+    final theme = Theme.of(context);
     return StreamBuilder<QuerySnapshot>(
       stream: _getUsersStream(),
       builder: (context, snapshot) {
         if (snapshot.hasError) {
-          return const Center(
+          return Center(
             child: Text(
               'Error loading users',
-              style: TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: theme.hintColor),
             ),
           );
         }
 
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(
-            child: CircularProgressIndicator(color: AppColors.primary),
+          return Center(
+            child: CircularProgressIndicator(color: theme.colorScheme.primary),
           );
         }
 
@@ -476,7 +476,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               _searchQuery.isEmpty
                   ? 'No other users found.'
                   : 'No users match "$_searchQuery"',
-              style: const TextStyle(color: AppColors.textSecondary),
+              style: TextStyle(color: theme.hintColor),
             ),
           ).animate().fadeIn();
         }
@@ -511,6 +511,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     userData['fullName'] ?? 'Unknown User',
                   );
                   if (Navigator.canPop(context)) {
+                    // Close bottom sheet if open
                     Navigator.pop(context);
                   }
                 }
@@ -529,20 +530,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final diff = now.difference(date);
 
     if (diff.inDays == 0) {
-      return DateFormat.Hm().format(date);
+      return DateFormat.Hm().format(date); // e.g., 14:30
     } else if (diff.inDays == 1) {
       return 'Yesterday';
     } else if (diff.inDays < 7) {
-      return DateFormat.EEEE().format(date);
+      return DateFormat.EEEE().format(date); // e.g., Tuesday
     } else {
-      return DateFormat.yMd().format(date);
+      return DateFormat.yMd().format(date); // e.g., 25/05/2023
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: theme.colorScheme.surface,
       body: SafeArea(
         child: Column(
           children: [
@@ -567,14 +569,14 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showNewIndividualChatDialog,
-        backgroundColor: AppColors.fabBackground,
+        backgroundColor: theme.colorScheme.primary,
         elevation: 4,
         tooltip: 'New Chat',
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: const Icon(
+        child: Icon(
           Icons.add_comment_outlined,
           size: 24,
-          color: AppColors.fabIcon,
+          color: theme.colorScheme.onPrimary,
         ),
       ).animate().scale(
         delay: 300.ms,
@@ -585,31 +587,35 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildAppBar() {
+    final theme = Theme.of(context);
     return Container(
-      color: AppColors.appBarBackground,
-      padding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 12,
-      ), // Adjusted padding
+      color: theme.appBarTheme.backgroundColor ?? theme.colorScheme.surface,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(5), // Softer radius
+                borderRadius: BorderRadius.circular(5),
                 child: Image.asset(
-                  'assets/clean_logo.png',
+                  // Assuming you have a logo, otherwise use an Icon
+                  'assets/clean_logo.png', // Make sure this asset exists
                   width: 24,
                   height: 24,
+                  errorBuilder:
+                      (context, error, stackTrace) => Icon(
+                        Icons.chat_bubble_rounded,
+                        color: theme.colorScheme.primary,
+                        size: 24,
+                      ),
                 ).animate().fadeIn(delay: 50.ms),
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Text(
-                'Talk2Me',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  // Adjusted size
-                  color: AppColors.primary, // Use primary color for branding
+                'Talk2Me', // Your App Name
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  color: theme.colorScheme.primary,
                   fontWeight: FontWeight.bold,
                   letterSpacing: 0.5,
                 ),
@@ -621,8 +627,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               IconButton(
                 icon: Icon(
                   _showSearchBar ? Icons.close_rounded : Icons.search_rounded,
-                  color: AppColors.icon,
-                  size: 24, // Slightly larger
+                  color: theme.iconTheme.color,
+                  size: 24,
                 ),
                 tooltip: _showSearchBar ? "Close Search" : "Search Chats",
                 onPressed: () {
@@ -630,7 +636,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     _showSearchBar = !_showSearchBar;
                     if (!_showSearchBar) {
                       _searchController.clear();
-                      // _searchQuery is already handled by listener
                     }
                   });
                 },
@@ -649,13 +654,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   final displayName = userData?['fullName'] as String? ?? "U";
 
                   return InkWell(
-                    onTap: _showOptionsMenu, // Moved options to avatar tap
+                    onTap: _showOptionsMenu,
                     borderRadius: BorderRadius.circular(20),
                     child: CircleAvatar(
-                      radius: 20, // Slightly larger
-                      backgroundColor: AppColors.avatarBackground.withOpacity(
-                        0.2,
-                      ),
+                      radius: 20,
+                      backgroundColor: theme.colorScheme.primaryContainer
+                          .withValues(alpha: 0.5),
                       backgroundImage:
                           avatarUrl != null && avatarUrl.isNotEmpty
                               ? NetworkImage(avatarUrl)
@@ -664,8 +668,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           (avatarUrl == null || avatarUrl.isEmpty)
                               ? Text(
                                 displayName.substring(0, 1).toUpperCase(),
-                                style: const TextStyle(
-                                  color: AppColors.avatarText,
+                                style: TextStyle(
+                                  color: theme.colorScheme.onPrimaryContainer,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 18,
                                 ),
@@ -683,17 +687,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildSearchBar() {
+    final theme = Theme.of(context);
     return Container(
       key: const ValueKey('searchBar'),
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12), // Adjusted margin
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
       padding: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
-        color: AppColors.searchBarBackground,
-        borderRadius: BorderRadius.circular(12), // Softer radius
-        border: Border.all(color: AppColors.border, width: 1),
+        color:
+            theme.inputDecorationTheme.fillColor ??
+            theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: theme.dividerColor, width: 1),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 5,
             offset: const Offset(0, 2),
           ),
@@ -702,67 +709,63 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       child: TextField(
         controller: _searchController,
         autofocus: true,
-        style: const TextStyle(color: AppColors.textPrimary, fontSize: 15),
+        style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 15),
         decoration: InputDecoration(
           hintText: 'Search conversations or users...',
           hintStyle: TextStyle(
-            color: AppColors.textSecondary.withOpacity(0.7),
+            color: theme.hintColor.withValues(alpha: 0.7),
             fontSize: 14,
           ),
           border: InputBorder.none,
-          prefixIcon: const Icon(
+          prefixIcon: Icon(
             Icons.search_rounded,
-            color: AppColors.icon,
+            color: theme.iconTheme.color,
             size: 20,
           ),
           suffixIcon:
               _searchQuery.isNotEmpty
                   ? IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.clear_rounded,
-                      color: AppColors.icon,
+                      color: theme.iconTheme.color,
                       size: 20,
                     ),
                     onPressed: () {
                       _searchController.clear();
-                      // _searchQuery will be updated by listener
                     },
                   )
                   : null,
         ),
-        // onChanged is handled by listener in initState
       ),
     ).animate().fadeIn(duration: 200.ms);
   }
 
   Widget _buildMainContent() {
+    final theme = Theme.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.mainContentBackground,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20), // Softer radius
+        color: theme.colorScheme.surface, // Main content area background
+        borderRadius: const BorderRadius.only(
+          topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 10,
-            offset: Offset(0, -2), // Shadow for separation
+            offset: const Offset(0, -2),
           ),
         ],
       ),
       child: ClipRRect(
-        // Ensures content respects border radius
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(20),
           topRight: Radius.circular(20),
         ),
         child: Column(
           children: [
-            if (!_showSearchBar)
-              _buildTabBar(), // Only show tab bar if not searching
+            if (!_showSearchBar) _buildTabBar(),
             Expanded(
-              // If search bar is shown, always show user list. Otherwise, show chat list.
               child: _showSearchBar ? _buildUsersList() : _buildChatList(),
             ),
           ],
@@ -776,18 +779,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildTabBar() {
-    // This is more of a header for the chat list now
+    final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12), // Adjusted padding
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text(
+          Text(
             'Conversations',
-            style: TextStyle(
-              fontSize: 20, // Slightly larger
+            style: theme.textTheme.titleLarge?.copyWith(
+              color: theme.colorScheme.onSurface,
               fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
             ),
           ),
           StreamBuilder<QuerySnapshot>(
@@ -800,16 +802,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(
-                    0.1,
-                  ), // Use primary color with opacity
+                  color: theme.colorScheme.primaryContainer.withValues(
+                    alpha: 0.8,
+                  ),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   '$chatCount Active',
-                  style: const TextStyle(
-                    color: AppColors.primary, // Text color matches primary
-                    fontWeight: FontWeight.w600, // Bolder
+                  style: TextStyle(
+                    color: theme.colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
                 ),
@@ -833,28 +835,29 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     required int index,
     required VoidCallback onTap,
   }) {
+    final theme = Theme.of(context);
     final bool isUnread = unreadCount > 0;
     final bool hasAttachment =
         lastMessage.startsWith("[Attachment:") || lastMessage.contains("📎");
 
     return Container(
-          margin: const EdgeInsets.only(bottom: 10), // Increased spacing
+          margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
             color:
                 isUnread
-                    ? AppColors.primary.withOpacity(0.05)
-                    : AppColors.surface,
-            borderRadius: BorderRadius.circular(16), // Softer radius
+                    ? theme.colorScheme.primaryContainer.withValues(alpha: 0.15)
+                    : theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color:
                   isUnread
-                      ? AppColors.primary.withOpacity(0.2)
-                      : AppColors.border,
+                      ? theme.colorScheme.primary.withValues(alpha: 0.3)
+                      : theme.dividerColor.withValues(alpha: 0.2),
               width: 1,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.03),
+                color: Colors.black.withValues(alpha: 0.03),
                 blurRadius: 5,
                 offset: const Offset(0, 1),
               ),
@@ -872,29 +875,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     Stack(
                       children: [
                         CircleAvatar(
-                          radius: 24, // Slightly larger
-                          backgroundColor: AppColors.avatarBackground,
+                          radius: 24,
+                          backgroundColor: theme.colorScheme.primaryContainer,
                           child: Text(
                             avatarLetter,
-                            style: const TextStyle(
-                              color: AppColors.avatarText,
-                              fontWeight: FontWeight.bold, // Bolder
-                              fontSize: 18, // Larger
+                            style: TextStyle(
+                              color: theme.colorScheme.onPrimaryContainer,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
                             ),
                           ),
                         ),
                         if (!isGroup && isOnline)
                           Positioned(
-                            bottom: 1, // Adjusted position
-                            right: 1, // Adjusted position
+                            bottom: 1,
+                            right: 1,
                             child: Container(
                               width: 12,
                               height: 12,
                               decoration: BoxDecoration(
-                                color: AppColors.onlineIndicator,
+                                color:
+                                    Colors.green, // Semantic color for online
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: AppColors.surface,
+                                  color: theme.colorScheme.surface,
                                   width: 2,
                                 ),
                               ),
@@ -914,24 +918,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                 child: Text(
                                   name,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
+                                  style: theme.textTheme.titleSmall?.copyWith(
                                     fontWeight:
                                         isUnread
                                             ? FontWeight.bold
-                                            : FontWeight.w600, // Bolder options
-                                    fontSize: 16, // Larger
-                                    color: AppColors.textPrimary,
+                                            : FontWeight.w600,
+                                    color: theme.colorScheme.onSurface,
                                   ),
                                 ),
                               ),
                               Text(
                                 time,
-                                style: TextStyle(
+                                style: theme.textTheme.bodySmall?.copyWith(
                                   color:
                                       isUnread
-                                          ? AppColors.primary
-                                          : AppColors.textSecondary,
-                                  fontSize: 12,
+                                          ? theme.colorScheme.primary
+                                          : theme.hintColor,
                                   fontWeight:
                                       isUnread
                                           ? FontWeight.w600
@@ -944,10 +946,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           Row(
                             children: [
                               if (hasAttachment)
-                                const Icon(
+                                Icon(
                                   Icons.attach_file_rounded,
                                   size: 14,
-                                  color: AppColors.textSecondary,
+                                  color: theme.hintColor,
                                 ),
                               if (hasAttachment) const SizedBox(width: 4),
                               Expanded(
@@ -955,18 +957,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   lastMessage,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
+                                  style: theme.textTheme.bodyMedium?.copyWith(
                                     color:
                                         isUnread
-                                            ? AppColors.textPrimary.withOpacity(
-                                              0.9,
-                                            )
-                                            : AppColors.textSecondary,
+                                            ? theme.colorScheme.onSurface
+                                                .withValues(alpha: 0.9)
+                                            : theme.hintColor,
                                     fontWeight:
                                         isUnread
                                             ? FontWeight.w500
                                             : FontWeight.normal,
-                                    fontSize: 14, // Larger
                                   ),
                                 ),
                               ),
@@ -976,19 +976,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 7,
                                     vertical: 3,
-                                  ), // Adjusted padding
+                                  ),
                                   decoration: BoxDecoration(
-                                    color: AppColors.unreadBadgeBackground,
-                                    borderRadius: BorderRadius.circular(
-                                      10,
-                                    ), // Rounded rectangle
+                                    color: theme.colorScheme.primary,
+                                    borderRadius: BorderRadius.circular(10),
                                   ),
                                   child: Text(
                                     unreadCount.toString(),
-                                    style: const TextStyle(
-                                      color: AppColors.unreadBadgeText,
+                                    style: TextStyle(
+                                      color: theme.colorScheme.onPrimary,
                                       fontSize: 11,
-                                      fontWeight: FontWeight.bold, // Bolder
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
                                 ),
@@ -1018,24 +1016,25 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     bool showCheckbox = false,
     bool isSelected = false,
   }) {
+    final theme = Theme.of(context);
     return Container(
           margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
             color:
                 isSelected
-                    ? AppColors.primary.withOpacity(0.1)
-                    : AppColors.surface,
+                    ? theme.colorScheme.primaryContainer.withValues(alpha: 0.3)
+                    : theme.colorScheme.surface,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color:
                   isSelected
-                      ? AppColors.primary.withOpacity(0.3)
-                      : AppColors.border,
+                      ? theme.colorScheme.primary.withValues(alpha: 0.5)
+                      : theme.dividerColor.withValues(alpha: 0.3),
               width: 1,
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.03),
+                color: Colors.black.withValues(alpha: 0.03),
                 blurRadius: 5,
                 offset: const Offset(0, 1),
               ),
@@ -1054,11 +1053,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       children: [
                         CircleAvatar(
                           radius: 24,
-                          backgroundColor: AppColors.avatarBackground,
+                          backgroundColor: theme.colorScheme.primaryContainer,
                           child: Text(
                             avatarLetter,
-                            style: const TextStyle(
-                              color: AppColors.avatarText,
+                            style: TextStyle(
+                              color: theme.colorScheme.onPrimaryContainer,
                               fontWeight: FontWeight.bold,
                               fontSize: 18,
                             ),
@@ -1072,10 +1071,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               width: 12,
                               height: 12,
                               decoration: BoxDecoration(
-                                color: AppColors.onlineIndicator,
+                                color:
+                                    Colors.green, // Semantic color for online
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: AppColors.surface,
+                                  color: theme.colorScheme.surface,
                                   width: 2,
                                 ),
                               ),
@@ -1090,10 +1090,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         children: [
                           Text(
                             name,
-                            style: const TextStyle(
+                            style: theme.textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                              color: AppColors.textPrimary,
+                              color: theme.colorScheme.onSurface,
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -1101,10 +1100,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             isOnline ? 'Online' : 'Offline',
                             style: TextStyle(
                               color:
-                                  isOnline
-                                      ? AppColors.onlineIndicator
-                                      : AppColors.offlineIndicator,
-                              fontSize: 13, // Slightly larger
+                                  isOnline ? Colors.green : theme.disabledColor,
+                              fontSize: 13,
                               fontWeight:
                                   isOnline
                                       ? FontWeight.w500
@@ -1120,15 +1117,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         onChanged: (bool? value) {
                           onTap();
                         },
-                        activeColor: AppColors.primary,
+                        activeColor: theme.colorScheme.primary,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(4),
                         ),
                       )
                     else
-                      const Icon(
+                      Icon(
                         Icons.arrow_forward_ios_rounded,
-                        color: AppColors.icon,
+                        color: theme.iconTheme.color?.withValues(alpha: 0.7),
                         size: 16,
                       ),
                   ],
@@ -1143,23 +1140,20 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _showNewIndividualChatDialog() {
+    final theme = Theme.of(context);
     _searchController.clear();
-    // _searchQuery is handled by listener
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor:
-          Colors.transparent, // Make it transparent for custom shape
+      backgroundColor: Colors.transparent,
       builder:
           (context) => StatefulBuilder(
             builder: (BuildContext context, StateSetter setModalState) {
               return Container(
-                height:
-                    MediaQuery.of(context).size.height *
-                    0.85, // Increased height
-                decoration: const BoxDecoration(
-                  color: AppColors.dialogBackground,
-                  borderRadius: BorderRadius.only(
+                height: MediaQuery.of(context).size.height * 0.85,
+                decoration: BoxDecoration(
+                  color: theme.dialogBackgroundColor,
+                  borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(20),
                     topRight: Radius.circular(20),
                   ),
@@ -1167,28 +1161,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 child: Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        20,
-                        20,
-                        12,
-                        12,
-                      ), // Adjusted padding
+                      padding: const EdgeInsets.fromLTRB(20, 20, 12, 12),
                       child: Row(
                         children: [
-                          const Text(
+                          Text(
                             'Start New Chat',
-                            style: TextStyle(
-                              fontSize: 20,
+                            style: theme.textTheme.titleLarge?.copyWith(
+                              color: theme.colorScheme.onSurface,
                               fontWeight: FontWeight.bold,
-                              color: AppColors.textPrimary,
                             ),
                           ),
                           const Spacer(),
                           IconButton(
                             onPressed: () => Navigator.pop(context),
-                            icon: const Icon(
+                            icon: Icon(
                               Icons.close_rounded,
-                              color: AppColors.icon,
+                              color: theme.iconTheme.color,
                             ),
                             tooltip: "Close",
                           ),
@@ -1203,41 +1191,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       child: TextField(
                         controller: _searchController,
                         autofocus: true,
+                        style: TextStyle(color: theme.colorScheme.onSurface),
                         decoration: InputDecoration(
                           hintText: 'Search users...',
                           hintStyle: TextStyle(
-                            color: AppColors.textSecondary.withOpacity(0.7),
+                            color: theme.hintColor.withValues(alpha: 0.7),
                           ),
-                          prefixIcon: const Icon(
+                          prefixIcon: Icon(
                             Icons.search_rounded,
-                            color: AppColors.icon,
+                            color: theme.iconTheme.color,
                           ),
                           suffixIcon:
                               _searchQuery.isNotEmpty
                                   ? IconButton(
-                                    icon: const Icon(
+                                    icon: Icon(
                                       Icons.clear_rounded,
-                                      color: AppColors.icon,
+                                      color: theme.iconTheme.color,
                                     ),
                                     onPressed: () {
                                       _searchController.clear();
-                                      // Listener will update _searchQuery and call setModalState
                                     },
                                   )
                                   : null,
                           filled: true,
                           fillColor:
-                              AppColors
-                                  .background, // Lighter background for text field
+                              theme.inputDecorationTheme.fillColor ??
+                              theme.colorScheme.surfaceContainerHighest,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide:
-                                BorderSide.none, // No border, rely on fill
+                            borderSide: BorderSide.none,
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(
-                              color: AppColors.primary,
+                            borderSide: BorderSide(
+                              color: theme.colorScheme.primary.withValues(
+                                alpha: 0.5,
+                              ),
                               width: 1.5,
                             ),
                           ),
@@ -1245,10 +1234,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                             vertical: 14,
                           ),
                         ),
-                        // onChanged handled by listener
                       ),
                     ),
-                    const Divider(height: 1, color: AppColors.border),
+                    Divider(
+                      height: 1,
+                      color: theme.dividerColor.withValues(alpha: 0.3),
+                    ),
                     Expanded(child: _buildUsersList()),
                   ],
                 ),
@@ -1256,9 +1247,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             },
           ),
     ).whenComplete(() {
-      _searchController
-          .clear(); // Clear search for main screen if it was using the same controller
-      // _searchQuery updated by listener
+      _searchController.clear();
     });
   }
 
@@ -1266,9 +1255,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     Navigator.pop(context); // Close the options menu first
     showDialog(
       context: context,
-      barrierDismissible: false, // Prevent accidental dismiss
+      barrierDismissible: false,
       builder: (BuildContext context) {
         return CreateGroupDialog(
+          // This widget itself will use Theme.of(context) internally
           currentUserId: widget.currentUserId,
           firestore: _firestore,
           onGroupCreated: (groupName, selectedUsers) {
@@ -1280,9 +1270,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _showOptionsMenu() {
+    final theme = Theme.of(context);
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.dialogBackground,
+      backgroundColor: theme.dialogBackgroundColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
           topLeft: Radius.circular(20),
@@ -1291,19 +1282,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
       builder:
           (context) => Container(
-            padding: const EdgeInsets.symmetric(
-              vertical: 12,
-            ), // Adjusted padding
+            padding: const EdgeInsets.symmetric(vertical: 12),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Optional: Drag handle
                 Container(
                   width: 40,
                   height: 4,
                   margin: const EdgeInsets.only(bottom: 10),
                   decoration: BoxDecoration(
-                    color: AppColors.border,
+                    color: theme.dividerColor.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -1317,18 +1305,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   title: 'Settings',
                   onTap: () {
                     Navigator.pop(context);
-                    _showErrorSnackBar('Settings (Not Implemented)');
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const SettingsScreen(),
+                      ),
+                    );
                   },
                 ),
-                const Divider(
-                  indent: 16,
-                  endIndent: 16,
-                  color: AppColors.border,
-                ),
+                Divider(indent: 16, endIndent: 16, color: theme.dividerColor),
                 _buildMenuListItem(
                   icon: Icons.logout_outlined,
                   title: 'Sign Out',
-                  color: AppColors.error, // Red for sign out
+                  color: theme.colorScheme.error,
                   onTap: () async {
                     Navigator.pop(context);
                     try {
@@ -1347,7 +1335,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                           ),
                           (Route<dynamic> route) => false,
                         );
-                        // SnackBar for success can be added in AuthScreen or a wrapper
                       }
                     } catch (e) {
                       if (mounted) {
@@ -1356,7 +1343,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     }
                   },
                 ),
-                const SizedBox(height: 8), // Bottom padding
+                const SizedBox(height: 8),
               ],
             ),
           ),
@@ -1367,26 +1354,22 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     required IconData icon,
     required String title,
     required VoidCallback onTap,
-    Color? color,
+    Color? color, // Allow overriding color for specific items like "Sign Out"
   }) {
+    final theme = Theme.of(context);
+    final itemColor = color ?? theme.colorScheme.onSurface;
     return ListTile(
-      leading: Icon(icon, color: color ?? AppColors.icon, size: 22),
+      leading: Icon(icon, color: itemColor, size: 22),
       title: Text(
         title,
-        style: TextStyle(
-          color: color ?? AppColors.textPrimary,
-          fontSize: 16,
+        style: theme.textTheme.titleMedium?.copyWith(
+          color: itemColor,
           fontWeight: FontWeight.w500,
         ),
       ),
       onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 20,
-        vertical: 4,
-      ), // Adjusted padding
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-      ), // Subtle shape for tap feedback
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
     );
   }
 }
@@ -1456,46 +1439,46 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return AlertDialog(
-      backgroundColor: AppColors.dialogBackground,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ), // Softer radius
-      title: const Text(
+      backgroundColor: theme.dialogBackgroundColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: Text(
         'Create New Group',
-        style: TextStyle(
-          color: AppColors.textPrimary,
+        style: theme.textTheme.titleLarge?.copyWith(
+          color: theme.colorScheme.onSurface,
           fontWeight: FontWeight.bold,
         ),
       ),
       contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
       content: SizedBox(
-        width: double.maxFinite, // Ensure it takes available width
-        height:
-            MediaQuery.of(context).size.height *
-            0.6, // Fixed height for scrollable content
+        width: double.maxFinite,
+        height: MediaQuery.of(context).size.height * 0.6,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: _groupNameController,
+              style: TextStyle(color: theme.colorScheme.onSurface),
               decoration: InputDecoration(
                 labelText: 'Group Name',
-                labelStyle: const TextStyle(color: AppColors.textSecondary),
+                labelStyle: TextStyle(color: theme.hintColor),
                 hintText: 'Enter group name',
                 hintStyle: TextStyle(
-                  color: AppColors.textSecondary.withOpacity(0.7),
+                  color: theme.hintColor.withValues(alpha: 0.7),
                 ),
                 filled: true,
-                fillColor: AppColors.background,
+                fillColor:
+                    theme.inputDecorationTheme.fillColor ??
+                    theme.colorScheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: AppColors.primary,
+                  borderSide: BorderSide(
+                    color: theme.colorScheme.primary,
                     width: 1.5,
                   ),
                 ),
@@ -1504,28 +1487,28 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                   vertical: 14,
                 ),
               ),
-              style: const TextStyle(color: AppColors.textPrimary),
             ),
             const SizedBox(height: 16),
             TextField(
               controller: _searchUserController,
+              style: TextStyle(color: theme.colorScheme.onSurface),
               decoration: InputDecoration(
                 labelText: 'Add Members',
-                labelStyle: const TextStyle(color: AppColors.textSecondary),
+                labelStyle: TextStyle(color: theme.hintColor),
                 hintText: 'Search users to add',
                 hintStyle: TextStyle(
-                  color: AppColors.textSecondary.withOpacity(0.7),
+                  color: theme.hintColor.withValues(alpha: 0.7),
                 ),
-                prefixIcon: const Icon(
+                prefixIcon: Icon(
                   Icons.search_rounded,
-                  color: AppColors.icon,
+                  color: theme.iconTheme.color,
                 ),
                 suffixIcon:
                     _userSearchQuery.isNotEmpty
                         ? IconButton(
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.clear_rounded,
-                            color: AppColors.icon,
+                            color: theme.iconTheme.color,
                           ),
                           onPressed: () {
                             _searchUserController.clear();
@@ -1533,15 +1516,17 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                         )
                         : null,
                 filled: true,
-                fillColor: AppColors.background,
+                fillColor:
+                    theme.inputDecorationTheme.fillColor ??
+                    theme.colorScheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
-                    color: AppColors.primary,
+                  borderSide: BorderSide(
+                    color: theme.colorScheme.primary,
                     width: 1.5,
                   ),
                 ),
@@ -1550,8 +1535,6 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                   vertical: 14,
                 ),
               ),
-              style: const TextStyle(color: AppColors.textPrimary),
-              // onChanged handled by listener
             ),
             const SizedBox(height: 8),
             Expanded(
@@ -1559,14 +1542,14 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                 stream: _getDialogUsersStream(),
                 builder: (context, snapshot) {
                   if (snapshot.hasError)
-                    return const Text(
+                    return Text(
                       "Error loading users.",
-                      style: TextStyle(color: AppColors.error),
+                      style: TextStyle(color: theme.colorScheme.error),
                     );
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
+                    return Center(
                       child: CircularProgressIndicator(
-                        color: AppColors.primary,
+                        color: theme.colorScheme.primary,
                       ),
                     );
                   }
@@ -1588,13 +1571,13 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                         _userSearchQuery.isEmpty
                             ? "No users to add."
                             : "No users match '$_userSearchQuery'",
-                        style: const TextStyle(color: AppColors.textSecondary),
+                        style: TextStyle(color: theme.hintColor),
                       ),
                     );
                   }
 
                   return ListView.builder(
-                    shrinkWrap: true, // Important for Column layout
+                    shrinkWrap: true,
                     padding: const EdgeInsets.only(top: 8),
                     itemCount: filteredUsers.length,
                     itemBuilder: (context, index) {
@@ -1609,8 +1592,8 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                       return CheckboxListTile(
                         title: Text(
                           userName,
-                          style: const TextStyle(
-                            color: AppColors.textPrimary,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            color: theme.colorScheme.onSurface,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -1622,25 +1605,25 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                           });
                         },
                         secondary: CircleAvatar(
-                          backgroundColor: AppColors.avatarBackground
-                              .withOpacity(0.8),
+                          backgroundColor: theme.colorScheme.primaryContainer,
                           child: Text(
                             userName.substring(0, 1).toUpperCase(),
-                            style: const TextStyle(
-                              color: AppColors.avatarText,
+                            style: TextStyle(
+                              color: theme.colorScheme.onPrimaryContainer,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
                         ),
-                        activeColor: AppColors.primary,
-                        controlAffinity:
-                            ListTileControlAffinity.leading, // Checkbox on left
+                        activeColor: theme.colorScheme.primary,
+                        controlAffinity: ListTileControlAffinity.leading,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 8,
                         ),
                         tileColor:
                             isSelected
-                                ? AppColors.primary.withOpacity(0.05)
+                                ? theme.colorScheme.primaryContainer.withValues(
+                                  alpha: 0.2,
+                                )
                                 : Colors.transparent,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -1651,11 +1634,10 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                 },
               ),
             ),
-            // Display selected users (optional)
             if (_selectedUsersData.isNotEmpty) ...[
               const SizedBox(height: 8),
               SizedBox(
-                height: 40, // Fixed height for the chip list
+                height: 40,
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children:
@@ -1667,13 +1649,13 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                               ),
                               child: Chip(
                                 avatar: CircleAvatar(
-                                  backgroundColor: AppColors.primary,
+                                  backgroundColor: theme.colorScheme.primary,
                                   child: Text(
                                     (user['name'] as String)
                                         .substring(0, 1)
                                         .toUpperCase(),
-                                    style: const TextStyle(
-                                      color: AppColors.textOnPrimary,
+                                    style: TextStyle(
+                                      color: theme.colorScheme.onPrimary,
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -1681,18 +1663,18 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                                 ),
                                 label: Text(
                                   user['name'] as String,
-                                  style: const TextStyle(
-                                    color: AppColors.primary,
+                                  style: TextStyle(
+                                    color: theme.colorScheme.primary,
                                     fontWeight: FontWeight.w500,
                                   ),
                                 ),
-                                backgroundColor: AppColors.primary.withOpacity(
-                                  0.15,
-                                ),
+                                backgroundColor: theme
+                                    .colorScheme
+                                    .primaryContainer
+                                    .withValues(alpha: 0.3),
                                 onDeleted: () => _toggleUserSelection(user),
-                                deleteIconColor: AppColors.primary.withOpacity(
-                                  0.7,
-                                ),
+                                deleteIconColor: theme.colorScheme.primary
+                                    .withValues(alpha: 0.7),
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 8,
                                   vertical: 4,
@@ -1704,23 +1686,18 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                 ),
               ),
             ],
-            const SizedBox(height: 16), // Space before actions
+            const SizedBox(height: 16),
           ],
         ),
       ),
-      actionsPadding: const EdgeInsets.fromLTRB(
-        20,
-        0,
-        20,
-        16,
-      ), // Adjusted padding
+      actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text(
+          child: Text(
             'Cancel',
             style: TextStyle(
-              color: AppColors.textSecondary,
+              color: theme.hintColor,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -1729,8 +1706,8 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
           icon: const Icon(Icons.group_add_rounded, size: 18),
           label: const Text('Create Group'),
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.primary,
-            foregroundColor: AppColors.textOnPrimary,
+            backgroundColor: theme.colorScheme.primary,
+            foregroundColor: theme.colorScheme.onPrimary,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
             ),
@@ -1749,7 +1726,7 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                   content: const Text(
                     'Please enter a group name and select at least one member.',
                   ),
-                  backgroundColor: AppColors.error,
+                  backgroundColor: theme.colorScheme.error,
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
