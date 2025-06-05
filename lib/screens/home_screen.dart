@@ -1473,7 +1473,10 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                     theme.colorScheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+                  borderSide: BorderSide(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                    width: 0.5,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
@@ -1521,7 +1524,10 @@ class _CreateGroupDialogState extends State<CreateGroupDialog> {
                     theme.colorScheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide.none,
+                  borderSide: BorderSide(
+                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
+                    width: 0.5,
+                  ),
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),

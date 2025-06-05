@@ -1,5 +1,7 @@
 // ignore_for_file: use_build_context_synchronously
 
+import 'dart:io';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -898,13 +900,18 @@ class _AuthScreenState extends State<AuthScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 20),
-        SocialButton(
-          text: 'Continue with Google',
-          icon: FontAwesomeIcons.google,
-          // iconColor: theme.colorScheme.error, // Google's red, or let theme decide
-          onPressed: isLoading ? null : _handleGoogleSignIn,
-        ),
+        if (!Platform.isWindows)
+          Column(
+            children: [
+              const SizedBox(height: 20),
+              SocialButton(
+                text: 'Continue with Google',
+                icon: FontAwesomeIcons.google,
+                // iconColor: theme.colorScheme.error, // Google's red, or let theme decide
+                onPressed: isLoading ? null : _handleGoogleSignIn,
+              ),
+            ],
+          ),
       ],
     );
   }
