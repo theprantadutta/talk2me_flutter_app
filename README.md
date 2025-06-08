@@ -170,7 +170,7 @@ talk2me_flutter_app/
 
 1.  **Clone the Repository (if applicable):**
     ```bash
-    git clone <your-repository-url>
+    git clone https://github.com/theprantadutta/talk2me_flutter_app.git
     cd talk2me_flutter_app
     ```
 2.  **Install Dependencies:**
