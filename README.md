@@ -39,29 +39,37 @@
 
 ## Screenshots
 
-1.  **Authentication Screen (Login & Signup)**
-    *Description: Shows the login form with an option to switch to the signup form, including email/password fields and Google Sign-In.*
-    ![Authentication Screen](./screenshots/screenshots_1.jpg)
-
-2.  **Home Screen (Chat List)**
-    *Description: Displays the list of active individual and group conversations, with last message previews and unread indicators.*
-    ![Home Screen](./screenshots/screenshot_2.jpg)
-
-3.  **Chat Screen (1-on-1 Conversation)**
-    *Description: Shows a typical one-on-one chat interface with message bubbles, sender names (if group), timestamps, and the message input area.*
-    ![Chat Screen](./screenshots/screenshot_3.jpg)
-
-4.  **Chat Screen (Group Conversation)**
-    *Description: Illustrates a group chat, potentially showing different sender names and the group name in the AppBar.*
-    ![Group Chat Screen](./screenshots/screenshot_4.jpg)
-
-<!-- 5.  **New Chat/Group Creation Dialog**
-    *Description: Shows the interface for searching users to start a new chat or for creating a new group and adding members.*
-    `![New Chat Dialog](https://placehold.co/300x600/EFEFEF/AAAAAA?text=New+Chat/Group)` -->
-
-5.  **Settings Screen**
-    *Description: Displays the settings options, including theme selection, account info, and logout.*
-    ![Settings Screen](./screenshots/screenshot_5.jpg)
+<table>
+  <tr>
+    <td align="center">
+      <strong>Authentication Screen</strong><br/>
+      <em>Login & Signup</em><br/>
+      <img src="./screenshots/screenshots_1.jpg" width="200"/>
+    </td>
+    <td align="center">
+      <strong>Home Screen</strong><br/>
+      <em>Chat List</em><br/>
+      <img src="./screenshots/screenshot_2.jpg" width="200"/>
+    </td>
+    <td align="center">
+      <strong>1-on-1 Chat</strong><br/>
+      <em>Conversation</em><br/>
+      <img src="./screenshots/screenshot_3.jpg" width="200"/>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <strong>Group Chat</strong><br/>
+      <em>Group Conversation</em><br/>
+      <img src="./screenshots/screenshot_4.jpg" width="200"/>
+    </td>
+    <td align="center">
+      <strong>Settings</strong><br/>
+      <em>Theme, Info & Logout</em><br/>
+      <img src="./screenshots/screenshot_5.jpg" width="200"/>
+    </td>
+  </tr>
+</table>
 
 
 ## Technologies Used
@@ -84,7 +92,36 @@
 
 ## Project Structure (Illustrative)
 
-talk2me_flutter_app/├── android/├── ios/├── lib/│   ├── main.dart                 # App entry point, MaterialApp setup│   ├── app_colors.dart           # (If still used, otherwise theming is in main.dart)│   ├── models/│   │   └── chat_message.dart     # Data model for chat messages│   ├── screens/│   │   ├── auth_screen.dart      # Login, Signup, Password Reset│   │   ├── home_screen.dart      # Displays chat list, user list, FABs│   │   ├── chat_screen.dart      # Individual and group chat interface│   │   └── settings_screen.dart  # App settings│   ├── widgets/                  # (If you have custom reusable widgets)│   │   └── custom_text_field.dart # Example custom widget│   │   └── custom_button.dart    # Example custom widget│   └── providers/                # (If using Provider/Riverpod for state management)│       └── theme_provider.dart   # Example for theme state├── assets/│   ├── logo.png                  # App logo│   ├── images/│   │   └── chat_bg.png           # Background image for chat screen│   └── screenshots/              # (Recommended folder for your screenshots)│       ├── auth_screen.png│       └── ...├── test/└── pubspec.yaml                  # Project dependencies and metadata
+```
+talk2me_flutter_app/
+├── android/
+├── ios/
+├── lib/
+│   ├── main.dart                  # App entry point, MaterialApp setup
+│   ├── app_colors.dart            # (If still used, otherwise theming is in main.dart)
+│   ├── models/
+│   │   └── chat_message.dart      # Data model for chat messages
+│   ├── screens/
+│   │   ├── auth_screen.dart       # Login, Signup, Password Reset
+│   │   ├── home_screen.dart       # Displays chat list, user list, FABs
+│   │   ├── chat_screen.dart       # Individual and group chat interface
+│   │   └── settings_screen.dart   # App settings
+│   ├── widgets/                   # (If you have custom reusable widgets)
+│   │   ├── custom_text_field.dart # Example custom widget
+│   │   └── custom_button.dart     # Example custom widget
+│   └── providers/                 # (If using Provider/Riverpod for state management)
+│       └── theme_provider.dart    # Example for theme state
+├── assets/
+│   ├── logo.png                   # App logo
+│   ├── images/
+│   │   └── chat_bg.png            # Background image for chat screen
+│   └── screenshots/              # (Recommended folder for your screenshots)
+│       ├── auth_screen.png
+│       └── ...
+├── test/
+└── pubspec.yaml                   # Project dependencies and metadata
+```
+
 
 ## Setup and Installation
 
