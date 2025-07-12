@@ -44,29 +44,29 @@
     <td align="center">
       <strong>Authentication Screen</strong><br/>
       <em>Login & Signup</em><br/>
-      <img src="./screenshots/screenshots_1.jpg" width="200"/>
+      <img src="./screenshots/1_auth_screen_light.jpg" width="200"/>
     </td>
     <td align="center">
       <strong>Home Screen</strong><br/>
       <em>Chat List</em><br/>
-      <img src="./screenshots/screenshot_2.jpg" width="200"/>
+      <img src="./screenshots/2_home_screen_light.jpg" width="200"/>
     </td>
     <td align="center">
       <strong>1-on-1 Chat</strong><br/>
       <em>Conversation</em><br/>
-      <img src="./screenshots/screenshot_3.jpg" width="200"/>
+      <img src="./screenshots/3_chat_screen_light.jpg" width="200"/>
     </td>
   </tr>
   <tr>
     <td align="center">
       <strong>Group Chat</strong><br/>
       <em>Group Conversation</em><br/>
-      <img src="./screenshots/screenshot_4.jpg" width="200"/>
+      <img src="./screenshots/4_chat_group_screen_light.jpg" width="200"/>
     </td>
     <td align="center">
       <strong>Settings</strong><br/>
       <em>Theme, Info & Logout</em><br/>
-      <img src="./screenshots/screenshot_5.jpg" width="200"/>
+      <img src="./screenshots/5_settings_screen_light.jpg" width="200"/>
     </td>
   </tr>
 </table>
