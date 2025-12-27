@@ -74,17 +74,20 @@ extension DateTimeExtensions on DateTime {
     }
   }
 
-  // Message time formatting
+  // Message time formatting (alias for messageTimeFormat)
   String get messageTimeFormat {
     return DateFormat.jm().format(this); // e.g., "2:30 PM"
   }
+
+  // Time only (short form, same as messageTimeFormat)
+  String get timeOnly => messageTimeFormat;
 
   // Full date format
   String get fullDateFormat {
     return DateFormat.yMMMd().format(this); // e.g., "Jan 5, 2024"
   }
 
-  // Relative time
+  // Relative time (alias: timeAgo)
   String get relativeTime {
     final now = DateTime.now();
     final difference = now.difference(this);
@@ -99,6 +102,29 @@ extension DateTimeExtensions on DateTime {
       return '${difference.inDays}d ago';
     } else {
       return fullDateFormat;
+    }
+  }
+
+  // Time ago (alias for relativeTime)
+  String get timeAgo => relativeTime;
+
+  // Date label for message grouping
+  String get dateLabel {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final messageDate = DateTime(year, month, day);
+
+    if (messageDate == today) {
+      return 'Today';
+    } else if (messageDate == yesterday) {
+      return 'Yesterday';
+    } else if (now.difference(this).inDays < 7) {
+      return DateFormat.EEEE().format(this); // e.g., "Monday"
+    } else if (now.year == year) {
+      return DateFormat.MMMd().format(this); // e.g., "Jan 5"
+    } else {
+      return DateFormat.yMMMd().format(this); // e.g., "Jan 5, 2024"
     }
   }
 }

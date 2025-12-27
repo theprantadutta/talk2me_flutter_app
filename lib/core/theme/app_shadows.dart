@@ -59,4 +59,11 @@ abstract class AppShadows {
       spreadRadius: 4,
     ),
   ];
+
+  // Single glow shadow for buttons and interactive elements
+  static BoxShadow glowShadow(Color color, {double intensity = 0.3}) => BoxShadow(
+    color: color.withValues(alpha: intensity),
+    blurRadius: 16,
+    spreadRadius: 2,
+  );
 }

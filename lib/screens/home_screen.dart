@@ -1,10 +1,22 @@
+import 'dart:ui';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 
+import '../core/constants/animation_constants.dart';
+import '../core/theme/app_radius.dart';
+import '../core/theme/app_spacing.dart';
+import '../widgets/common/app_avatar.dart';
+import '../widgets/common/empty_state.dart';
+import '../widgets/common/gradient_background.dart';
+import '../widgets/common/loading_shimmer.dart';
+import '../widgets/glass/glass_app_bar.dart';
+import '../widgets/glass/glass_button.dart';
+import '../widgets/glass/glass_card.dart';
+import '../widgets/glass/glass_container.dart';
 import 'auth_screen.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
@@ -24,6 +36,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
+  late AnimationController _fabAnimationController;
+  late Animation<double> _fabScaleAnimation;
+
   @override
   void initState() {
     super.initState();
@@ -35,16 +50,30 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         });
       }
     });
+
+    _fabAnimationController = AnimationController(
+      duration: AnimationConstants.normal,
+      vsync: this,
+    );
+    _fabScaleAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(
+        parent: _fabAnimationController,
+        curve: Curves.elasticOut,
+      ),
+    );
+    Future.delayed(AnimationConstants.slow, () {
+      if (mounted) _fabAnimationController.forward();
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _fabAnimationController.dispose();
     super.dispose();
   }
 
   Future<void> _initializeUser() async {
-    // Update user's online status
     await _firestore.collection('users').doc(widget.currentUserId).set({
       'isOnline': true,
       'lastSeen': FieldValue.serverTimestamp(),
@@ -66,36 +95,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         .snapshots();
   }
 
-  Future<Map<String, dynamic>?> _getLastMessage(String chatId) async {
-    final lastMessageQuery =
-        await _firestore
-            .collection('chats/$chatId/messages')
-            .orderBy('timestamp', descending: true)
-            .limit(1)
-            .get();
-
-    if (lastMessageQuery.docs.isNotEmpty) {
-      return lastMessageQuery.docs.first.data();
-    }
-    return null;
-  }
-
   Future<int> _getUnreadCount(String chatId) async {
     try {
       final unreadQuerySnapshot =
           await _firestore.collection('chats/$chatId/messages').get();
 
-      final unreadDocs =
-          unreadQuerySnapshot.docs.where((doc) {
-            final readBy = List<String>.from(doc['readBy'] ?? []);
-            return !readBy.contains(widget.currentUserId);
-          }).toList();
+      final unreadDocs = unreadQuerySnapshot.docs.where((doc) {
+        final readBy = List<String>.from(doc['readBy'] ?? []);
+        return !readBy.contains(widget.currentUserId);
+      }).toList();
 
       return unreadDocs.length;
     } catch (e) {
-      if (kDebugMode) {
-        print('Error getting unread count for chat $chatId: $e');
-      }
+      if (kDebugMode) print('Error getting unread count: $e');
       return 0;
     }
   }
@@ -104,12 +116,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     String otherUserId,
     String otherUserName,
   ) async {
-    final existingChatQuery =
-        await _firestore
-            .collection('chats')
-            .where('participants', arrayContains: widget.currentUserId)
-            .where('isGroupChat', isEqualTo: false)
-            .get();
+    final existingChatQuery = await _firestore
+        .collection('chats')
+        .where('participants', arrayContains: widget.currentUserId)
+        .where('isGroupChat', isEqualTo: false)
+        .get();
 
     String? chatId;
 
@@ -125,9 +136,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final currentUserDoc =
           await _firestore.collection('users').doc(widget.currentUserId).get();
       if (!currentUserDoc.exists) {
-        if (mounted) {
-          _showErrorSnackBar('Current user not found');
-        }
+        if (mounted) _showErrorSnackBar('Current user not found');
         return;
       }
       final newChat = await _firestore.collection('chats').add({
@@ -149,13 +158,12 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder:
-              (context) => ChatScreen(
-                userId: widget.currentUserId,
-                chatId: chatId!,
-                chatName: otherUserName,
-                isGroupChat: false,
-              ),
+          builder: (context) => ChatScreen(
+            userId: widget.currentUserId,
+            chatId: chatId!,
+            chatName: otherUserName,
+            isGroupChat: false,
+          ),
         ),
       );
     }
@@ -175,9 +183,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final currentUserDoc =
         await _firestore.collection('users').doc(widget.currentUserId).get();
     if (!currentUserDoc.exists) {
-      if (mounted) {
-        _showErrorSnackBar('Current user not found');
-      }
+      if (mounted) _showErrorSnackBar('Current user not found');
       return;
     }
     final String currentUserName =
@@ -209,17 +215,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     });
 
     if (mounted) {
-      Navigator.pop(context); // Close the create group dialog
+      Navigator.pop(context);
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder:
-              (context) => ChatScreen(
-                userId: widget.currentUserId,
-                chatId: newChat.id,
-                chatName: groupName,
-                isGroupChat: true,
-              ),
+          builder: (context) => ChatScreen(
+            userId: widget.currentUserId,
+            chatId: newChat.id,
+            chatName: groupName,
+            isGroupChat: true,
+          ),
         ),
       );
     }
@@ -238,1031 +243,979 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildChatList() {
-    final theme = Theme.of(context);
-    return StreamBuilder<QuerySnapshot>(
-      stream: _getChatsStream(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Error loading chats',
-              style: TextStyle(color: theme.hintColor),
-            ),
-          );
-        }
-
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(
-            child: CircularProgressIndicator(color: theme.colorScheme.primary),
-          );
-        }
-
-        final chats = snapshot.data?.docs ?? [];
-
-        if (chats.isEmpty) {
-          return Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  Icons.chat_bubble_outline_rounded,
-                  size: 64,
-                  color: theme.iconTheme.color?.withValues(alpha: 0.7),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  'No Conversations Yet',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: theme.colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Tap the + button to start a new chat or group.',
-                  textAlign: TextAlign.center,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.hintColor,
-                  ),
-                ),
-              ],
-            ).animate().fadeIn(duration: 300.ms),
-          );
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          itemCount: chats.length,
-          itemBuilder: (context, index) {
-            final chatDoc = chats[index];
-            final chatData = chatDoc.data() as Map<String, dynamic>;
-            final bool isGroupChat = chatData['isGroupChat'] ?? false;
-
-            String chatDisplayName;
-            String avatarLetter = '?';
-
-            if (isGroupChat) {
-              chatDisplayName = chatData['groupName'] ?? 'Group Chat';
-              if (chatDisplayName.isNotEmpty) {
-                avatarLetter = chatDisplayName.substring(0, 1).toUpperCase();
-              }
-            } else {
-              final participants = List<String>.from(chatData['participants']);
-              final participantNames = Map<String, String>.from(
-                chatData['participantNames'] ?? {},
-              );
-              final otherUserId = participants.firstWhere(
-                (id) => id != widget.currentUserId,
-                orElse: () => '',
-              );
-
-              if (otherUserId.isNotEmpty) {
-                chatDisplayName =
-                    participantNames[otherUserId] ?? 'Unknown User';
-                if (chatDisplayName.isNotEmpty) {
-                  avatarLetter = chatDisplayName.substring(0, 1).toUpperCase();
-                }
-              } else {
-                chatDisplayName = 'Chat';
-                avatarLetter = 'C';
-              }
-            }
-
-            return FutureBuilder<Map<String, dynamic>?>(
-              future: _getLastMessage(chatDoc.id),
-              builder: (context, messageSnapshot) {
-                return FutureBuilder<int>(
-                  future: _getUnreadCount(chatDoc.id),
-                  builder: (context, unreadSnapshot) {
-                    if (!isGroupChat) {
-                      final participants = List<String>.from(
-                        chatData['participants'],
-                      );
-                      final otherUserId = participants.firstWhere(
-                        (id) => id != widget.currentUserId,
-                        orElse: () => '',
-                      );
-
-                      return StreamBuilder<DocumentSnapshot>(
-                        stream:
-                            _firestore
-                                .collection('users')
-                                .doc(otherUserId)
-                                .snapshots(),
-                        builder: (context, userSnapshot) {
-                          final userData =
-                              userSnapshot.data?.data()
-                                  as Map<String, dynamic>?;
-                          final isOnline = userData?['isOnline'] ?? false;
-
-                          return _buildChatItemInternal(
-                            chatDoc: chatDoc,
-                            chatData: chatData,
-                            messageSnapshot: messageSnapshot,
-                            unreadSnapshot: unreadSnapshot,
-                            isGroupChat: isGroupChat,
-                            chatDisplayName: chatDisplayName,
-                            avatarLetter: avatarLetter,
-                            isOnline: isOnline,
-                            index: index,
-                          );
-                        },
-                      );
-                    } else {
-                      return _buildChatItemInternal(
-                        chatDoc: chatDoc,
-                        chatData: chatData,
-                        messageSnapshot: messageSnapshot,
-                        unreadSnapshot: unreadSnapshot,
-                        isGroupChat: isGroupChat,
-                        chatDisplayName: chatDisplayName,
-                        avatarLetter: avatarLetter,
-                        isOnline:
-                            false, // Groups don't have a single online status like this
-                        index: index,
-                      );
-                    }
-                  },
-                );
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildChatItemInternal({
-    required DocumentSnapshot chatDoc,
-    required Map<String, dynamic> chatData,
-    required AsyncSnapshot<Map<String, dynamic>?> messageSnapshot,
-    required AsyncSnapshot<int> unreadSnapshot,
-    required bool isGroupChat,
-    required String chatDisplayName,
-    required String avatarLetter,
-    required bool isOnline,
-    required int index,
-  }) {
-    final lastMessageData = messageSnapshot.data;
-    final lastMessageContent =
-        lastMessageData?['message'] ??
-        (isGroupChat ? 'Group created' : 'No messages yet');
-    final lastMessageTime = lastMessageData?['timestamp'] as Timestamp?;
-    final unreadCount = unreadSnapshot.data ?? 0;
-
-    return _buildChatItem(
-      chatId: chatDoc.id,
-      name: chatDisplayName,
-      lastMessage: lastMessageContent,
-      time: _formatTime(lastMessageTime),
-      unreadCount: unreadCount,
-      isOnline: isOnline,
-      isGroup: isGroupChat,
-      avatarLetter: avatarLetter,
-      index: index,
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder:
-                (context) => ChatScreen(
-                  userId: widget.currentUserId,
-                  chatId: chatDoc.id,
-                  chatName: chatDisplayName,
-                  isGroupChat: isGroupChat,
-                ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildUsersList({
-    Function(Map<String, dynamic> userData, bool isSelected)? onUserTap,
-    List<String>? initiallySelectedUserIds,
-  }) {
-    final theme = Theme.of(context);
-    return StreamBuilder<QuerySnapshot>(
-      stream: _getUsersStream(),
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Center(
-            child: Text(
-              'Error loading users',
-              style: TextStyle(color: theme.hintColor),
-            ),
-          );
-        }
-
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return Center(
-            child: CircularProgressIndicator(color: theme.colorScheme.primary),
-          );
-        }
-
-        final users = snapshot.data?.docs ?? [];
-        final filteredUsers =
-            users.where((doc) {
-              final userData = doc.data() as Map<String, dynamic>;
-              final userName = userData['fullName'] ?? '';
-              return userName.toLowerCase().contains(
-                _searchQuery.toLowerCase(),
-              );
-            }).toList();
-
-        if (filteredUsers.isEmpty) {
-          return Center(
-            child: Text(
-              _searchQuery.isEmpty
-                  ? 'No other users found.'
-                  : 'No users match "$_searchQuery"',
-              style: TextStyle(color: theme.hintColor),
-            ),
-          ).animate().fadeIn();
-        }
-
-        return ListView.builder(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          itemCount: filteredUsers.length,
-          itemBuilder: (context, index) {
-            final userDoc = filteredUsers[index];
-            final userData = userDoc.data() as Map<String, dynamic>;
-            final bool isSelected =
-                initiallySelectedUserIds?.contains(userDoc.id) ?? false;
-
-            return _buildUserItem(
-              userId: userDoc.id,
-              name: userData['fullName'] ?? 'Unknown User',
-              isOnline: userData['isOnline'] ?? false,
-              avatarLetter:
-                  (userData['fullName'] ?? 'U').substring(0, 1).toUpperCase(),
-              index: index,
-              showCheckbox: onUserTap != null,
-              isSelected: isSelected,
-              onTap: () {
-                if (onUserTap != null) {
-                  onUserTap({
-                    'id': userDoc.id,
-                    'name': userData['fullName'] ?? 'Unknown User',
-                  }, !isSelected);
-                } else {
-                  _createOrNavigateToIndividualChat(
-                    userDoc.id,
-                    userData['fullName'] ?? 'Unknown User',
-                  );
-                  if (Navigator.canPop(context)) {
-                    // Close bottom sheet if open
-                    Navigator.pop(context);
-                  }
-                }
-              },
-            );
-          },
-        );
-      },
-    );
-  }
-
   String _formatTime(Timestamp? timestamp) {
     if (timestamp == null) return '';
+    final dateTime = timestamp.toDate();
     final now = DateTime.now();
-    final date = timestamp.toDate();
-    final diff = now.difference(date);
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
 
-    if (diff.inDays == 0) {
-      return DateFormat.Hm().format(date); // e.g., 14:30
-    } else if (diff.inDays == 1) {
+    if (messageDate == today) {
+      return DateFormat.jm().format(dateTime);
+    } else if (messageDate == yesterday) {
       return 'Yesterday';
-    } else if (diff.inDays < 7) {
-      return DateFormat.EEEE().format(date); // e.g., Tuesday
+    } else if (now.difference(dateTime).inDays < 7) {
+      return DateFormat.E().format(dateTime);
     } else {
-      return DateFormat.yMd().format(date); // e.g., 25/05/2023
+      return DateFormat.MMMd().format(dateTime);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Scaffold(
-      backgroundColor: theme.colorScheme.surface,
+
+    return GradientScaffold(
+      gradientStyle: GradientStyle.mesh,
+      appBar: GlassAppBar(
+        title: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(5),
+              child: Image.asset(
+                'assets/clean_logo.png',
+                width: 24,
+                height: 24,
+                errorBuilder: (context, error, stackTrace) => Icon(
+                  Icons.chat_bubble_rounded,
+                  color: theme.colorScheme.primary,
+                  size: 24,
+                ),
+              ),
+            ),
+            const SizedBox(width: AppSpacing.sm),
+            Text(
+              'Talk2Me',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          IconButton(
+            icon: Icon(
+              _showSearchBar ? Icons.close_rounded : Icons.search_rounded,
+            ),
+            onPressed: () {
+              setState(() {
+                _showSearchBar = !_showSearchBar;
+                if (!_showSearchBar) _searchController.clear();
+              });
+            },
+          ),
+          const SizedBox(width: AppSpacing.xs),
+          StreamBuilder<DocumentSnapshot>(
+            stream: _firestore
+                .collection('users')
+                .doc(widget.currentUserId)
+                .snapshots(),
+            builder: (context, snapshot) {
+              final userData = snapshot.data?.data() as Map<String, dynamic>?;
+              final avatarUrl = userData?['avatarUrl'] as String?;
+              final displayName = userData?['fullName'] as String? ?? 'U';
+
+              return GestureDetector(
+                onTap: _showOptionsMenu,
+                child: AppAvatar(
+                  imageUrl: avatarUrl,
+                  name: displayName,
+                  size: 36,
+                ),
+              );
+            },
+          ),
+          const SizedBox(width: AppSpacing.sm),
+        ],
+      ),
+      floatingActionButton: ScaleTransition(
+        scale: _fabScaleAnimation,
+        child: GlassFab(
+          icon: Icons.add_comment_outlined,
+          onPressed: _showNewChatOptions,
+          tooltip: 'New Chat',
+          showGlow: true,
+        ),
+      ),
       body: SafeArea(
         child: Column(
           children: [
-            _buildAppBar(),
-            AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              transitionBuilder: (child, animation) {
-                return SizeTransition(
-                  sizeFactor: animation,
-                  axisAlignment: -1.0,
-                  child: child,
-                );
-              },
-              child:
-                  _showSearchBar
-                      ? _buildSearchBar()
-                      : const SizedBox.shrink(key: ValueKey('emptySearchBar')),
+            // Search bar
+            AnimatedSize(
+              duration: AnimationConstants.fast,
+              child: _showSearchBar ? _buildSearchBar() : const SizedBox.shrink(),
             ),
-            Expanded(child: _buildMainContent()),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showNewIndividualChatDialog,
-        backgroundColor: theme.colorScheme.primary,
-        elevation: 4,
-        tooltip: 'New Chat',
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        child: Icon(
-          Icons.add_comment_outlined,
-          size: 24,
-          color: theme.colorScheme.onPrimary,
-        ),
-      ).animate().scale(
-        delay: 300.ms,
-        duration: 300.ms,
-        curve: Curves.easeOutBack,
-      ),
-    );
-  }
-
-  Widget _buildAppBar() {
-    final theme = Theme.of(context);
-    return Container(
-      color: theme.appBarTheme.backgroundColor ?? theme.colorScheme.surface,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(5),
-                child: Image.asset(
-                  // Assuming you have a logo, otherwise use an Icon
-                  'assets/clean_logo.png', // Make sure this asset exists
-                  width: 24,
-                  height: 24,
-                  errorBuilder:
-                      (context, error, stackTrace) => Icon(
-                        Icons.chat_bubble_rounded,
-                        color: theme.colorScheme.primary,
-                        size: 24,
-                      ),
-                ).animate().fadeIn(delay: 50.ms),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Talk2Me', // Your App Name
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  color: theme.colorScheme.primary,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.5,
-                ),
-              ).animate().fadeIn(delay: 100.ms, duration: 300.ms),
-            ],
-          ),
-          Row(
-            children: [
-              IconButton(
-                icon: Icon(
-                  _showSearchBar ? Icons.close_rounded : Icons.search_rounded,
-                  color: theme.iconTheme.color,
-                  size: 24,
-                ),
-                tooltip: _showSearchBar ? "Close Search" : "Search Chats",
-                onPressed: () {
-                  setState(() {
-                    _showSearchBar = !_showSearchBar;
-                    if (!_showSearchBar) {
-                      _searchController.clear();
-                    }
-                  });
-                },
-              ).animate().fadeIn(delay: 150.ms),
-              const SizedBox(width: 4),
-              StreamBuilder<DocumentSnapshot>(
-                stream:
-                    _firestore
-                        .collection('users')
-                        .doc(widget.currentUserId)
-                        .snapshots(),
-                builder: (context, snapshot) {
-                  final userData =
-                      snapshot.data?.data() as Map<String, dynamic>?;
-                  final avatarUrl = userData?['avatarUrl'] as String?;
-                  final displayName = userData?['fullName'] as String? ?? "U";
-
-                  return InkWell(
-                    onTap: _showOptionsMenu,
-                    borderRadius: BorderRadius.circular(20),
-                    child: CircleAvatar(
-                      radius: 20,
-                      backgroundColor: theme.colorScheme.primaryContainer
-                          .withValues(alpha: 0.5),
-                      backgroundImage:
-                          avatarUrl != null && avatarUrl.isNotEmpty
-                              ? NetworkImage(avatarUrl)
-                              : null,
-                      child:
-                          (avatarUrl == null || avatarUrl.isEmpty)
-                              ? Text(
-                                displayName.substring(0, 1).toUpperCase(),
-                                style: TextStyle(
-                                  color: theme.colorScheme.onPrimaryContainer,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 18,
-                                ),
-                              )
-                              : null,
-                    ),
-                  );
-                },
-              ).animate().fadeIn(delay: 200.ms),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSearchBar() {
-    final theme = Theme.of(context);
-    return Container(
-      key: const ValueKey('searchBar'),
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      decoration: BoxDecoration(
-        color:
-            theme.inputDecorationTheme.fillColor ??
-            theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.dividerColor, width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 5,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: TextField(
-        controller: _searchController,
-        autofocus: true,
-        style: TextStyle(color: theme.colorScheme.onSurface, fontSize: 15),
-        decoration: InputDecoration(
-          hintText: 'Search conversations or users...',
-          hintStyle: TextStyle(
-            color: theme.hintColor.withValues(alpha: 0.7),
-            fontSize: 14,
-          ),
-          border: InputBorder.none,
-          prefixIcon: Icon(
-            Icons.search_rounded,
-            color: theme.iconTheme.color,
-            size: 20,
-          ),
-          suffixIcon:
-              _searchQuery.isNotEmpty
-                  ? IconButton(
-                    icon: Icon(
-                      Icons.clear_rounded,
-                      color: theme.iconTheme.color,
-                      size: 20,
-                    ),
-                    onPressed: () {
-                      _searchController.clear();
-                    },
-                  )
-                  : null,
-        ),
-      ),
-    ).animate().fadeIn(duration: 200.ms);
-  }
-
-  Widget _buildMainContent() {
-    final theme = Theme.of(context);
-    return Container(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface, // Main content area background
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: const BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-        child: Column(
-          children: [
-            if (!_showSearchBar) _buildTabBar(),
+            // Main content
             Expanded(
               child: _showSearchBar ? _buildUsersList() : _buildChatList(),
             ),
           ],
         ),
       ),
-    ).animate().slideY(
-      begin: 0.02,
-      duration: 300.ms,
-      curve: Curves.easeOutCubic,
     );
   }
 
-  Widget _buildTabBar() {
+  Widget _buildSearchBar() {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            'Conversations',
-            style: theme.textTheme.titleLarge?.copyWith(
-              color: theme.colorScheme.onSurface,
-              fontWeight: FontWeight.bold,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      child: GlassContainer(
+        blur: 12,
+        opacity: isDark ? 0.1 : 0.6,
+        borderRadius: AppRadius.lg,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+        child: TextField(
+          controller: _searchController,
+          autofocus: true,
+          style: theme.textTheme.bodyLarge,
+          decoration: InputDecoration(
+            hintText: 'Search conversations or users...',
+            hintStyle: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
             ),
+            border: InputBorder.none,
+            prefixIcon: const Icon(Icons.search_rounded),
+            suffixIcon: _searchQuery.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear_rounded),
+                    onPressed: () => _searchController.clear(),
+                  )
+                : null,
           ),
-          StreamBuilder<QuerySnapshot>(
-            stream: _getChatsStream(),
-            builder: (context, snapshot) {
-              final chatCount = snapshot.data?.docs.length ?? 0;
-              return Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: theme.colorScheme.primaryContainer.withValues(
-                    alpha: 0.8,
-                  ),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  '$chatCount Active',
-                  style: TextStyle(
-                    color: theme.colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 12,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChatList() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _getChatsStream(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return EmptyState.error(
+            message: 'Error loading chats',
+            onRetry: () => setState(() {}),
+          );
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return ListView.builder(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            itemCount: 5,
+            itemBuilder: (context, index) => const ChatListShimmer(),
+          );
+        }
+
+        final chats = snapshot.data?.docs ?? [];
+
+        if (chats.isEmpty) {
+          return EmptyState.noChats(
+            onStartChat: _showNewChatOptions,
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.md,
+            vertical: AppSpacing.sm,
+          ),
+          itemCount: chats.length,
+          itemBuilder: (context, index) {
+            final chatDoc = chats[index];
+            final chatData = chatDoc.data() as Map<String, dynamic>;
+            return _buildChatTile(chatDoc.id, chatData, index);
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildChatTile(String chatId, Map<String, dynamic> chatData, int index) {
+    final theme = Theme.of(context);
+    final bool isGroupChat = chatData['isGroupChat'] ?? false;
+
+    String chatDisplayName;
+    if (isGroupChat) {
+      chatDisplayName = chatData['groupName'] ?? 'Group Chat';
+    } else {
+      final participants = List<String>.from(chatData['participants']);
+      final participantNames =
+          Map<String, String>.from(chatData['participantNames'] ?? {});
+      final otherUserId = participants.firstWhere(
+        (id) => id != widget.currentUserId,
+        orElse: () => '',
+      );
+      chatDisplayName = participantNames[otherUserId] ?? 'Unknown User';
+    }
+
+    final lastMessage = chatData['lastMessage'] ?? '';
+    final lastMessageTime = chatData['lastMessageTime'] as Timestamp?;
+    final timeString = _formatTime(lastMessageTime);
+
+    return FutureBuilder<int>(
+      future: _getUnreadCount(chatId),
+      builder: (context, unreadSnapshot) {
+        final unreadCount = unreadSnapshot.data ?? 0;
+        final hasUnread = unreadCount > 0;
+
+        Widget tile = AnimatedContainer(
+          duration: AnimationConstants.fast,
+          margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+          child: GlassCard(
+            blur: 10,
+            padding: const EdgeInsets.all(AppSpacing.md),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ChatScreen(
+                    userId: widget.currentUserId,
+                    chatId: chatId,
+                    chatName: chatDisplayName,
+                    isGroupChat: isGroupChat,
                   ),
                 ),
               );
             },
-          ),
-        ],
-      ),
-    ).animate().fadeIn(delay: 100.ms);
-  }
-
-  Widget _buildChatItem({
-    required String chatId,
-    required String name,
-    required String lastMessage,
-    required String time,
-    required int unreadCount,
-    required bool isOnline,
-    required bool isGroup,
-    required String avatarLetter,
-    required int index,
-    required VoidCallback onTap,
-  }) {
-    final theme = Theme.of(context);
-    final bool isUnread = unreadCount > 0;
-    final bool hasAttachment =
-        lastMessage.startsWith("[Attachment:") || lastMessage.contains("📎");
-
-    return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          decoration: BoxDecoration(
-            color:
-                isUnread
-                    ? theme.colorScheme.primaryContainer.withValues(alpha: 0.15)
-                    : theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color:
-                  isUnread
-                      ? theme.colorScheme.primary.withValues(alpha: 0.3)
-                      : theme.dividerColor.withValues(alpha: 0.2),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 5,
-                offset: const Offset(0, 1),
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: onTap,
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Row(
-                  children: [
-                    Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 24,
-                          backgroundColor: theme.colorScheme.primaryContainer,
-                          child: Text(
-                            avatarLetter,
-                            style: TextStyle(
-                              color: theme.colorScheme.onPrimaryContainer,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
+            child: Row(
+              children: [
+                // Avatar
+                if (isGroupChat)
+                  AppAvatar(
+                    name: chatDisplayName,
+                    size: 52,
+                    backgroundColor:
+                        theme.colorScheme.secondary.withValues(alpha: 0.3),
+                  )
+                else
+                  _buildUserAvatar(chatData, chatDisplayName),
+                const SizedBox(width: AppSpacing.md),
+                // Content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Name row
+                      Row(
+                        children: [
+                          if (isGroupChat)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Icon(
+                                Icons.group_rounded,
+                                size: 14,
+                                color: theme.colorScheme.onSurface
+                                    .withValues(alpha: 0.6),
+                              ),
+                            ),
+                          Expanded(
+                            child: Text(
+                              chatDisplayName,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight:
+                                    hasUnread ? FontWeight.w700 : FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                        ),
-                        if (!isGroup && isOnline)
-                          Positioned(
-                            bottom: 1,
-                            right: 1,
-                            child: Container(
-                              width: 12,
-                              height: 12,
+                          Text(
+                            timeString,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: hasUnread
+                                  ? theme.colorScheme.primary
+                                  : theme.colorScheme.onSurface
+                                      .withValues(alpha: 0.5),
+                              fontWeight:
+                                  hasUnread ? FontWeight.w600 : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xxs),
+                      // Message row
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              lastMessage.isEmpty
+                                  ? 'No messages yet'
+                                  : lastMessage,
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: hasUnread
+                                    ? theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.8)
+                                    : theme.colorScheme.onSurface
+                                        .withValues(alpha: 0.5),
+                                fontWeight:
+                                    hasUnread ? FontWeight.w500 : FontWeight.normal,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (hasUnread)
+                            Container(
+                              margin: const EdgeInsets.only(left: AppSpacing.sm),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.sm,
+                                vertical: AppSpacing.xxs,
+                              ),
                               decoration: BoxDecoration(
-                                color:
-                                    Colors.green, // Semantic color for online
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: theme.colorScheme.surface,
-                                  width: 2,
+                                gradient: LinearGradient(
+                                  colors: [
+                                    theme.colorScheme.primary,
+                                    theme.colorScheme.secondary,
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                unreadCount > 99 ? '99+' : unreadCount.toString(),
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: theme.colorScheme.onPrimary,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        // Add stagger animation
+        return TweenAnimationBuilder<double>(
+          tween: Tween(begin: 0, end: 1),
+          duration: Duration(milliseconds: 300 + (index * 50)),
+          curve: Curves.easeOut,
+          builder: (context, value, child) {
+            return Opacity(
+              opacity: value,
+              child: Transform.translate(
+                offset: Offset(0, 20 * (1 - value)),
+                child: child,
+              ),
+            );
+          },
+          child: tile,
+        );
+      },
+    );
+  }
+
+  Widget _buildUserAvatar(Map<String, dynamic> chatData, String displayName) {
+    final participants = List<String>.from(chatData['participants']);
+    final otherUserId = participants.firstWhere(
+      (id) => id != widget.currentUserId,
+      orElse: () => '',
+    );
+
+    if (otherUserId.isEmpty) {
+      return AppAvatar(name: displayName, size: 52);
+    }
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: _firestore.collection('users').doc(otherUserId).snapshots(),
+      builder: (context, snapshot) {
+        final userData = snapshot.data?.data() as Map<String, dynamic>?;
+        final avatarUrl = userData?['avatarUrl'] as String?;
+        final isOnline = userData?['isOnline'] ?? false;
+
+        return AppAvatar(
+          imageUrl: avatarUrl,
+          name: displayName,
+          size: 52,
+          isOnline: isOnline,
+          showOnlineIndicator: true,
+        );
+      },
+    );
+  }
+
+  Widget _buildUsersList() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: _getUsersStream(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return EmptyState.error(message: 'Error loading users');
+        }
+
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        var users = snapshot.data?.docs ?? [];
+
+        // Filter by search query
+        if (_searchQuery.isNotEmpty) {
+          users = users.where((doc) {
+            final userData = doc.data() as Map<String, dynamic>;
+            final fullName =
+                (userData['fullName'] ?? '').toString().toLowerCase();
+            final username =
+                (userData['username'] ?? '').toString().toLowerCase();
+            final email = (userData['email'] ?? '').toString().toLowerCase();
+            final query = _searchQuery.toLowerCase();
+            return fullName.contains(query) ||
+                username.contains(query) ||
+                email.contains(query);
+          }).toList();
+        }
+
+        if (users.isEmpty) {
+          return EmptyState.noUsers();
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          itemCount: users.length,
+          itemBuilder: (context, index) {
+            final userDoc = users[index];
+            final userData = userDoc.data() as Map<String, dynamic>;
+            final userId = userDoc.id;
+            final fullName = userData['fullName'] ?? 'Unknown User';
+            final username = userData['username'] ?? '';
+            final avatarUrl = userData['avatarUrl'] as String?;
+            final isOnline = userData['isOnline'] ?? false;
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              child: GlassCard(
+                blur: 10,
+                padding: const EdgeInsets.all(AppSpacing.md),
+                onTap: () => _createOrNavigateToIndividualChat(userId, fullName),
+                child: Row(
+                  children: [
+                    AppAvatar(
+                      imageUrl: avatarUrl,
+                      name: fullName,
+                      size: 48,
+                      isOnline: isOnline,
+                      showOnlineIndicator: true,
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          Text(
+                            fullName,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (username.isNotEmpty)
+                            Text(
+                              '@$username',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurface
+                                    .withValues(alpha: 0.6),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showNewChatOptions() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return ClipRRect(
+          borderRadius: AppRadius.bottomSheetRadius,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            child: Container(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              decoration: BoxDecoration(
+                borderRadius: AppRadius.bottomSheetRadius,
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.6)
+                    : Colors.white.withValues(alpha: 0.9),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.black.withValues(alpha: 0.05),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Start a Conversation',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: AppSpacing.lg),
+                  GlassCard(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showNewIndividualChatDialog();
+                    },
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(AppSpacing.sm),
+                          decoration: BoxDecoration(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                            borderRadius: AppRadius.md,
+                          ),
+                          child: Icon(
+                            Icons.person_outline_rounded,
+                            color: theme.colorScheme.primary,
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Flexible(
-                                child: Text(
-                                  name,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.titleSmall?.copyWith(
-                                    fontWeight:
-                                        isUnread
-                                            ? FontWeight.bold
-                                            : FontWeight.w600,
-                                    color: theme.colorScheme.onSurface,
-                                  ),
+                              Text(
+                                'New Chat',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                               Text(
-                                time,
+                                'Start a one-on-one conversation',
                                 style: theme.textTheme.bodySmall?.copyWith(
-                                  color:
-                                      isUnread
-                                          ? theme.colorScheme.primary
-                                          : theme.hintColor,
-                                  fontWeight:
-                                      isUnread
-                                          ? FontWeight.w600
-                                          : FontWeight.normal,
+                                  color: theme.colorScheme.onSurface
+                                      .withValues(alpha: 0.6),
                                 ),
                               ),
                             ],
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              if (hasAttachment)
-                                Icon(
-                                  Icons.attach_file_rounded,
-                                  size: 14,
-                                  color: theme.hintColor,
-                                ),
-                              if (hasAttachment) const SizedBox(width: 4),
-                              Expanded(
-                                child: Text(
-                                  lastMessage,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: theme.textTheme.bodyMedium?.copyWith(
-                                    color:
-                                        isUnread
-                                            ? theme.colorScheme.onSurface
-                                                .withValues(alpha: 0.9)
-                                            : theme.hintColor,
-                                    fontWeight:
-                                        isUnread
-                                            ? FontWeight.w500
-                                            : FontWeight.normal,
-                                  ),
-                                ),
-                              ),
-                              if (isUnread)
-                                Container(
-                                  margin: const EdgeInsets.only(left: 8),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 7,
-                                    vertical: 3,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: theme.colorScheme.primary,
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Text(
-                                    unreadCount.toString(),
-                                    style: TextStyle(
-                                      color: theme.colorScheme.onPrimary,
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        )
-        .animate()
-        .fadeIn(delay: (50 * index + 200).ms, duration: 250.ms)
-        .slideX(begin: 0.1, curve: Curves.easeOutCubic);
-  }
-
-  Widget _buildUserItem({
-    required String userId,
-    required String name,
-    required bool isOnline,
-    required String avatarLetter,
-    required int index,
-    required VoidCallback onTap,
-    bool showCheckbox = false,
-    bool isSelected = false,
-  }) {
-    final theme = Theme.of(context);
-    return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          decoration: BoxDecoration(
-            color:
-                isSelected
-                    ? theme.colorScheme.primaryContainer.withValues(alpha: 0.3)
-                    : theme.colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color:
-                  isSelected
-                      ? theme.colorScheme.primary.withValues(alpha: 0.5)
-                      : theme.dividerColor.withValues(alpha: 0.3),
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 5,
-                offset: const Offset(0, 1),
-              ),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(16),
-              onTap: onTap,
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Row(
-                  children: [
-                    Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 24,
-                          backgroundColor: theme.colorScheme.primaryContainer,
-                          child: Text(
-                            avatarLetter,
-                            style: TextStyle(
-                              color: theme.colorScheme.onPrimaryContainer,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 18,
-                            ),
                           ),
                         ),
-                        if (isOnline)
-                          Positioned(
-                            bottom: 1,
-                            right: 1,
-                            child: Container(
-                              width: 12,
-                              height: 12,
-                              decoration: BoxDecoration(
-                                color:
-                                    Colors.green, // Semantic color for online
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                  color: theme.colorScheme.surface,
-                                  width: 2,
-                                ),
-                              ),
-                            ),
-                          ),
+                        const Icon(Icons.chevron_right_rounded),
                       ],
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            style: theme.textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: theme.colorScheme.onSurface,
-                            ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  GlassCard(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    onTap: () {
+                      Navigator.pop(context);
+                      _showCreateGroupDialog();
+                    },
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(AppSpacing.sm),
+                          decoration: BoxDecoration(
+                            color:
+                                theme.colorScheme.secondary.withValues(alpha: 0.1),
+                            borderRadius: AppRadius.md,
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            isOnline ? 'Online' : 'Offline',
-                            style: TextStyle(
-                              color:
-                                  isOnline ? Colors.green : theme.disabledColor,
-                              fontSize: 13,
-                              fontWeight:
-                                  isOnline
-                                      ? FontWeight.w500
-                                      : FontWeight.normal,
-                            ),
+                          child: Icon(
+                            Icons.group_add_outlined,
+                            color: theme.colorScheme.secondary,
                           ),
-                        ],
-                      ),
-                    ),
-                    if (showCheckbox)
-                      Checkbox(
-                        value: isSelected,
-                        onChanged: (bool? value) {
-                          onTap();
-                        },
-                        activeColor: theme.colorScheme.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(4),
                         ),
-                      )
-                    else
-                      Icon(
-                        Icons.arrow_forward_ios_rounded,
-                        color: theme.iconTheme.color?.withValues(alpha: 0.7),
-                        size: 16,
-                      ),
-                  ],
-                ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'New Group',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              Text(
+                                'Create a group with multiple people',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: theme.colorScheme.onSurface
+                                      .withValues(alpha: 0.6),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const Icon(Icons.chevron_right_rounded),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: MediaQuery.of(context).padding.bottom + AppSpacing.md),
+                ],
               ),
             ),
           ),
-        )
-        .animate()
-        .fadeIn(delay: (50 * index).ms, duration: 250.ms)
-        .slideX(begin: 0.1, curve: Curves.easeOutCubic);
+        );
+      },
+    );
   }
 
   void _showNewIndividualChatDialog() {
     final theme = Theme.of(context);
-    _searchController.clear();
+    final isDark = theme.brightness == Brightness.dark;
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder:
-          (context) => StatefulBuilder(
-            builder: (BuildContext context, StateSetter setModalState) {
-              return Container(
-                height: MediaQuery.of(context).size.height * 0.85,
-                decoration: BoxDecoration(
-                  color: theme.dialogTheme.backgroundColor ?? theme.colorScheme.surface,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(20),
-                    topRight: Radius.circular(20),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.7,
+          minChildSize: 0.5,
+          maxChildSize: 0.9,
+          builder: (context, scrollController) {
+            return ClipRRect(
+              borderRadius: AppRadius.bottomSheetRadius,
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: AppRadius.bottomSheetRadius,
+                    color: isDark
+                        ? Colors.black.withValues(alpha: 0.6)
+                        : Colors.white.withValues(alpha: 0.9),
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                        decoration: BoxDecoration(
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+                        child: Text(
+                          'Select a User',
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.md),
+                      Expanded(
+                        child: StreamBuilder<QuerySnapshot>(
+                          stream: _getUsersStream(),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData) {
+                              return const Center(child: CircularProgressIndicator());
+                            }
+
+                            final users = snapshot.data?.docs ?? [];
+
+                            if (users.isEmpty) {
+                              return EmptyState.noUsers();
+                            }
+
+                            return ListView.builder(
+                              controller: scrollController,
+                              padding: const EdgeInsets.all(AppSpacing.md),
+                              itemCount: users.length,
+                              itemBuilder: (context, index) {
+                                final userDoc = users[index];
+                                final userData =
+                                    userDoc.data() as Map<String, dynamic>;
+                                final userId = userDoc.id;
+                                final fullName =
+                                    userData['fullName'] ?? 'Unknown User';
+                                final avatarUrl = userData['avatarUrl'] as String?;
+                                final isOnline = userData['isOnline'] ?? false;
+
+                                return Padding(
+                                  padding:
+                                      const EdgeInsets.only(bottom: AppSpacing.sm),
+                                  child: GlassCard(
+                                    blur: 8,
+                                    padding: const EdgeInsets.all(AppSpacing.md),
+                                    onTap: () {
+                                      Navigator.pop(context);
+                                      _createOrNavigateToIndividualChat(
+                                        userId,
+                                        fullName,
+                                      );
+                                    },
+                                    child: Row(
+                                      children: [
+                                        AppAvatar(
+                                          imageUrl: avatarUrl,
+                                          name: fullName,
+                                          size: 44,
+                                          isOnline: isOnline,
+                                          showOnlineIndicator: true,
+                                        ),
+                                        const SizedBox(width: AppSpacing.md),
+                                        Expanded(
+                                          child: Text(
+                                            fullName,
+                                            style: theme.textTheme.titleMedium,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                child: Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 20, 12, 12),
-                      child: Row(
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showCreateGroupDialog() {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final groupNameController = TextEditingController();
+    final List<Map<String, dynamic>> selectedUsers = [];
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return DraggableScrollableSheet(
+              initialChildSize: 0.8,
+              minChildSize: 0.5,
+              maxChildSize: 0.95,
+              builder: (context, scrollController) {
+                return ClipRRect(
+                  borderRadius: AppRadius.bottomSheetRadius,
+                  child: BackdropFilter(
+                    filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        borderRadius: AppRadius.bottomSheetRadius,
+                        color: isDark
+                            ? Colors.black.withValues(alpha: 0.6)
+                            : Colors.white.withValues(alpha: 0.9),
+                      ),
+                      child: Column(
                         children: [
-                          Text(
-                            'Start New Chat',
-                            style: theme.textTheme.titleLarge?.copyWith(
-                              color: theme.colorScheme.onSurface,
-                              fontWeight: FontWeight.bold,
+                          Container(
+                            width: 40,
+                            height: 4,
+                            margin:
+                                const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                            decoration: BoxDecoration(
+                              color:
+                                  theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(2),
                             ),
                           ),
-                          const Spacer(),
-                          IconButton(
-                            onPressed: () => Navigator.pop(context),
-                            icon: Icon(
-                              Icons.close_rounded,
-                              color: theme.iconTheme.color,
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.lg),
+                            child: Column(
+                              children: [
+                                Text(
+                                  'Create Group',
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.md),
+                                GlassContainer(
+                                  blur: 10,
+                                  opacity: isDark ? 0.1 : 0.6,
+                                  borderRadius: AppRadius.md,
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 16),
+                                  child: TextField(
+                                    controller: groupNameController,
+                                    decoration: const InputDecoration(
+                                      hintText: 'Group Name',
+                                      border: InputBorder.none,
+                                      prefixIcon:
+                                          Icon(Icons.group_outlined),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.md),
+                                if (selectedUsers.isNotEmpty)
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 8,
+                                    children: selectedUsers.map((user) {
+                                      return Chip(
+                                        label: Text(user['name']),
+                                        deleteIcon:
+                                            const Icon(Icons.close, size: 16),
+                                        onDeleted: () {
+                                          setSheetState(() {
+                                            selectedUsers.remove(user);
+                                          });
+                                        },
+                                      );
+                                    }).toList(),
+                                  ),
+                              ],
                             ),
-                            tooltip: "Close",
+                          ),
+                          const SizedBox(height: AppSpacing.md),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: AppSpacing.lg),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'Select Members',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.sm),
+                          Expanded(
+                            child: StreamBuilder<QuerySnapshot>(
+                              stream: _getUsersStream(),
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData) {
+                                  return const Center(
+                                      child: CircularProgressIndicator());
+                                }
+
+                                final users = snapshot.data?.docs ?? [];
+
+                                return ListView.builder(
+                                  controller: scrollController,
+                                  padding: const EdgeInsets.all(AppSpacing.md),
+                                  itemCount: users.length,
+                                  itemBuilder: (context, index) {
+                                    final userDoc = users[index];
+                                    final userData =
+                                        userDoc.data() as Map<String, dynamic>;
+                                    final userId = userDoc.id;
+                                    final fullName =
+                                        userData['fullName'] ?? 'Unknown User';
+                                    final avatarUrl =
+                                        userData['avatarUrl'] as String?;
+                                    final isSelected = selectedUsers.any(
+                                        (u) => u['id'] == userId);
+
+                                    return Padding(
+                                      padding: const EdgeInsets.only(
+                                          bottom: AppSpacing.sm),
+                                      child: GlassCard(
+                                        blur: 8,
+                                        padding:
+                                            const EdgeInsets.all(AppSpacing.md),
+                                        showGlow: isSelected,
+                                        glowColor: theme.colorScheme.primary,
+                                        onTap: () {
+                                          setSheetState(() {
+                                            if (isSelected) {
+                                              selectedUsers.removeWhere(
+                                                  (u) => u['id'] == userId);
+                                            } else {
+                                              selectedUsers.add({
+                                                'id': userId,
+                                                'name': fullName,
+                                              });
+                                            }
+                                          });
+                                        },
+                                        child: Row(
+                                          children: [
+                                            AppAvatar(
+                                              imageUrl: avatarUrl,
+                                              name: fullName,
+                                              size: 40,
+                                            ),
+                                            const SizedBox(width: AppSpacing.md),
+                                            Expanded(
+                                              child: Text(
+                                                fullName,
+                                                style:
+                                                    theme.textTheme.titleMedium,
+                                              ),
+                                            ),
+                                            if (isSelected)
+                                              Icon(
+                                                Icons.check_circle_rounded,
+                                                color: theme.colorScheme.primary,
+                                              ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+                          ),
+                          Padding(
+                            padding: EdgeInsets.only(
+                              left: AppSpacing.lg,
+                              right: AppSpacing.lg,
+                              bottom:
+                                  MediaQuery.of(context).padding.bottom + AppSpacing.lg,
+                            ),
+                            child: GlassButton(
+                              text: 'Create Group',
+                              onPressed: selectedUsers.isEmpty
+                                  ? null
+                                  : () {
+                                      final groupName =
+                                          groupNameController.text.trim();
+                                      if (groupName.isEmpty) {
+                                        _showErrorSnackBar(
+                                            'Please enter a group name');
+                                        return;
+                                      }
+                                      _createGroupChat(groupName, selectedUsers);
+                                    },
+                              fullWidth: true,
+                              showGlow: true,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: TextField(
-                        controller: _searchController,
-                        autofocus: true,
-                        style: TextStyle(color: theme.colorScheme.onSurface),
-                        decoration: InputDecoration(
-                          hintText: 'Search users...',
-                          hintStyle: TextStyle(
-                            color: theme.hintColor.withValues(alpha: 0.7),
-                          ),
-                          prefixIcon: Icon(
-                            Icons.search_rounded,
-                            color: theme.iconTheme.color,
-                          ),
-                          suffixIcon:
-                              _searchQuery.isNotEmpty
-                                  ? IconButton(
-                                    icon: Icon(
-                                      Icons.clear_rounded,
-                                      color: theme.iconTheme.color,
-                                    ),
-                                    onPressed: () {
-                                      _searchController.clear();
-                                    },
-                                  )
-                                  : null,
-                          filled: true,
-                          fillColor:
-                              theme.inputDecorationTheme.fillColor ??
-                              theme.colorScheme.surfaceContainerHighest,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(
-                              color: theme.colorScheme.primary.withValues(
-                                alpha: 0.5,
-                              ),
-                              width: 1.5,
-                            ),
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 14,
-                          ),
-                        ),
-                      ),
-                    ),
-                    Divider(
-                      height: 1,
-                      color: theme.dividerColor.withValues(alpha: 0.3),
-                    ),
-                    Expanded(child: _buildUsersList()),
-                  ],
-                ),
-              );
-            },
-          ),
-    ).whenComplete(() {
-      _searchController.clear();
-    });
-  }
-
-  void _showCreateGroupDialog() {
-    Navigator.pop(context); // Close the options menu first
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (BuildContext context) {
-        return CreateGroupDialog(
-          // This widget itself will use Theme.of(context) internally
-          currentUserId: widget.currentUserId,
-          firestore: _firestore,
-          onGroupCreated: (groupName, selectedUsers) {
-            _createGroupChat(groupName, selectedUsers);
+                  ),
+                );
+              },
+            );
           },
         );
       },
@@ -1271,480 +1224,101 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   void _showOptionsMenu() {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: theme.dialogTheme.backgroundColor ?? theme.colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(20),
-          topRight: Radius.circular(20),
-        ),
-      ),
-      builder:
-          (context) => Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 10),
-                  decoration: BoxDecoration(
-                    color: theme.dividerColor.withValues(alpha: 0.5),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                _buildMenuListItem(
-                  icon: Icons.group_add_outlined,
-                  title: 'New Group',
-                  onTap: _showCreateGroupDialog,
-                ),
-                _buildMenuListItem(
-                  icon: Icons.settings_outlined,
-                  title: 'Settings',
-                  onTap: () {
-                    Navigator.pop(context);
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => const SettingsScreen(),
-                      ),
-                    );
-                  },
-                ),
-                Divider(indent: 16, endIndent: 16, color: theme.dividerColor),
-                _buildMenuListItem(
-                  icon: Icons.logout_outlined,
-                  title: 'Sign Out',
-                  color: theme.colorScheme.error,
-                  onTap: () async {
-                    Navigator.pop(context);
-                    try {
-                      await _firestore
-                          .collection('users')
-                          .doc(widget.currentUserId)
-                          .set({
-                            'isOnline': false,
-                            'lastSeen': FieldValue.serverTimestamp(),
-                          }, SetOptions(merge: true));
-                      await FirebaseAuth.instance.signOut();
-                      if (mounted) {
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(
-                            builder: (context) => const AuthScreen(),
-                          ),
-                          (Route<dynamic> route) => false,
-                        );
-                      }
-                    } catch (e) {
-                      if (mounted) {
-                        _showErrorSnackBar('Error signing out: $e');
-                      }
-                    }
-                  },
-                ),
-                const SizedBox(height: 8),
-              ],
-            ),
-          ),
-    );
-  }
-
-  Widget _buildMenuListItem({
-    required IconData icon,
-    required String title,
-    required VoidCallback onTap,
-    Color? color, // Allow overriding color for specific items like "Sign Out"
-  }) {
-    final theme = Theme.of(context);
-    final itemColor = color ?? theme.colorScheme.onSurface;
-    return ListTile(
-      leading: Icon(icon, color: itemColor, size: 22),
-      title: Text(
-        title,
-        style: theme.textTheme.titleMedium?.copyWith(
-          color: itemColor,
-          fontWeight: FontWeight.w500,
-        ),
-      ),
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-    );
-  }
-}
-
-// Dialog for Creating a Group
-class CreateGroupDialog extends StatefulWidget {
-  final String currentUserId;
-  final FirebaseFirestore firestore;
-  final Function(String groupName, List<Map<String, dynamic>> selectedUsersData)
-  onGroupCreated;
-
-  const CreateGroupDialog({
-    super.key,
-    required this.currentUserId,
-    required this.firestore,
-    required this.onGroupCreated,
-  });
-
-  @override
-  State<CreateGroupDialog> createState() => _CreateGroupDialogState();
-}
-
-class _CreateGroupDialogState extends State<CreateGroupDialog> {
-  final _groupNameController = TextEditingController();
-  final _searchUserController = TextEditingController();
-  String _userSearchQuery = '';
-  final List<Map<String, dynamic>> _selectedUsersData = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _searchUserController.addListener(() {
-      if (mounted) {
-        setState(() {
-          _userSearchQuery = _searchUserController.text;
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _groupNameController.dispose();
-    _searchUserController.dispose();
-    super.dispose();
-  }
-
-  Stream<QuerySnapshot> _getDialogUsersStream() {
-    return widget.firestore
-        .collection('users')
-        .where(FieldPath.documentId, isNotEqualTo: widget.currentUserId)
-        .snapshots();
-  }
-
-  void _toggleUserSelection(Map<String, dynamic> userData) {
-    setState(() {
-      final existingIndex = _selectedUsersData.indexWhere(
-        (user) => user['id'] == userData['id'],
-      );
-      if (existingIndex >= 0) {
-        _selectedUsersData.removeAt(existingIndex);
-      } else {
-        _selectedUsersData.add(userData);
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return AlertDialog(
-      backgroundColor: theme.dialogTheme.backgroundColor ?? theme.colorScheme.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: Text(
-        'Create New Group',
-        style: theme.textTheme.titleLarge?.copyWith(
-          color: theme.colorScheme.onSurface,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      contentPadding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-      content: SizedBox(
-        width: double.maxFinite,
-        height: MediaQuery.of(context).size.height * 0.6,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _groupNameController,
-              style: TextStyle(color: theme.colorScheme.onSurface),
-              decoration: InputDecoration(
-                labelText: 'Group Name',
-                labelStyle: TextStyle(color: theme.hintColor),
-                hintText: 'Enter group name',
-                hintStyle: TextStyle(
-                  color: theme.hintColor.withValues(alpha: 0.7),
-                ),
-                filled: true,
-                fillColor:
-                    theme.inputDecorationTheme.fillColor ??
-                    theme.colorScheme.surfaceContainerHighest,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
-                    width: 0.5,
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: theme.colorScheme.primary,
-                    width: 1.5,
-                  ),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return ClipRRect(
+          borderRadius: AppRadius.bottomSheetRadius,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            child: Container(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              decoration: BoxDecoration(
+                borderRadius: AppRadius.bottomSheetRadius,
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.6)
+                    : Colors.white.withValues(alpha: 0.9),
               ),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _searchUserController,
-              style: TextStyle(color: theme.colorScheme.onSurface),
-              decoration: InputDecoration(
-                labelText: 'Add Members',
-                labelStyle: TextStyle(color: theme.hintColor),
-                hintText: 'Search users to add',
-                hintStyle: TextStyle(
-                  color: theme.hintColor.withValues(alpha: 0.7),
-                ),
-                prefixIcon: Icon(
-                  Icons.search_rounded,
-                  color: theme.iconTheme.color,
-                ),
-                suffixIcon:
-                    _userSearchQuery.isNotEmpty
-                        ? IconButton(
-                          icon: Icon(
-                            Icons.clear_rounded,
-                            color: theme.iconTheme.color,
-                          ),
-                          onPressed: () {
-                            _searchUserController.clear();
-                          },
-                        )
-                        : null,
-                filled: true,
-                fillColor:
-                    theme.inputDecorationTheme.fillColor ??
-                    theme.colorScheme.surfaceContainerHighest,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: theme.colorScheme.primary.withValues(alpha: 0.2),
-                    width: 0.5,
-                  ),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(
-                    color: theme.colorScheme.primary,
-                    width: 1.5,
-                  ),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 14,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: _getDialogUsersStream(),
-                builder: (context, snapshot) {
-                  if (snapshot.hasError) {
-                    return Text(
-                      "Error loading users.",
-                      style: TextStyle(color: theme.colorScheme.error),
-                    );
-                  }
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return Center(
-                      child: CircularProgressIndicator(
-                        color: theme.colorScheme.primary,
-                      ),
-                    );
-                  }
-                  final users = snapshot.data?.docs ?? [];
-                  final filteredUsers =
-                      users.where((doc) {
-                        final userData = doc.data() as Map<String, dynamic>;
-                        final userName =
-                            userData['fullName']?.toString().toLowerCase() ??
-                            '';
-                        return userName.contains(
-                          _userSearchQuery.toLowerCase(),
-                        );
-                      }).toList();
-
-                  if (filteredUsers.isEmpty) {
-                    return Center(
-                      child: Text(
-                        _userSearchQuery.isEmpty
-                            ? "No users to add."
-                            : "No users match '$_userSearchQuery'",
-                        style: TextStyle(color: theme.hintColor),
-                      ),
-                    );
-                  }
-
-                  return ListView.builder(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.only(top: 8),
-                    itemCount: filteredUsers.length,
-                    itemBuilder: (context, index) {
-                      final userDoc = filteredUsers[index];
-                      final userData = userDoc.data() as Map<String, dynamic>;
-                      final userName = userData['fullName'] ?? 'Unknown User';
-                      final userId = userDoc.id;
-                      final isSelected = _selectedUsersData.any(
-                        (user) => user['id'] == userId,
-                      );
-
-                      return CheckboxListTile(
-                        title: Text(
-                          userName,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            color: theme.colorScheme.onSurface,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        value: isSelected,
-                        onChanged: (bool? value) {
-                          _toggleUserSelection({
-                            'id': userId,
-                            'name': userName,
-                          });
-                        },
-                        secondary: CircleAvatar(
-                          backgroundColor: theme.colorScheme.primaryContainer,
-                          child: Text(
-                            userName.substring(0, 1).toUpperCase(),
-                            style: TextStyle(
-                              color: theme.colorScheme.onPrimaryContainer,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        activeColor: theme.colorScheme.primary,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                        ),
-                        tileColor:
-                            isSelected
-                                ? theme.colorScheme.primaryContainer.withValues(
-                                  alpha: 0.2,
-                                )
-                                : Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildOptionItem(
+                    icon: Icons.settings_outlined,
+                    title: 'Settings',
+                    onTap: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SettingsScreen(),
                         ),
                       );
                     },
-                  );
-                },
+                  ),
+                  _buildOptionItem(
+                    icon: Icons.logout_rounded,
+                    title: 'Logout',
+                    isDestructive: true,
+                    onTap: () async {
+                      final navigator = Navigator.of(context);
+                      navigator.pop();
+                      await _firestore
+                          .collection('users')
+                          .doc(widget.currentUserId)
+                          .update({
+                        'isOnline': false,
+                        'lastSeen': FieldValue.serverTimestamp(),
+                      });
+                      await FirebaseAuth.instance.signOut();
+                      if (mounted) {
+                        navigator.pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (context) => const AuthScreen(),
+                          ),
+                          (route) => false,
+                        );
+                      }
+                    },
+                  ),
+                  SizedBox(
+                      height: MediaQuery.of(context).padding.bottom + AppSpacing.sm),
+                ],
               ),
             ),
-            if (_selectedUsersData.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              SizedBox(
-                height: 40,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  children:
-                      _selectedUsersData
-                          .map(
-                            (user) => Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4.0,
-                              ),
-                              child: Chip(
-                                avatar: CircleAvatar(
-                                  backgroundColor: theme.colorScheme.primary,
-                                  child: Text(
-                                    (user['name'] as String)
-                                        .substring(0, 1)
-                                        .toUpperCase(),
-                                    style: TextStyle(
-                                      color: theme.colorScheme.onPrimary,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                label: Text(
-                                  user['name'] as String,
-                                  style: TextStyle(
-                                    color: theme.colorScheme.primary,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                backgroundColor: theme
-                                    .colorScheme
-                                    .primaryContainer
-                                    .withValues(alpha: 0.3),
-                                onDeleted: () => _toggleUserSelection(user),
-                                deleteIconColor: theme.colorScheme.primary
-                                    .withValues(alpha: 0.7),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                              ),
-                            ),
-                          )
-                          .toList(),
-                ),
-              ),
-            ],
-            const SizedBox(height: 16),
-          ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildOptionItem({
+    required IconData icon,
+    required String title,
+    required VoidCallback onTap,
+    bool isDestructive = false,
+  }) {
+    final theme = Theme.of(context);
+
+    return ListTile(
+      leading: Icon(
+        icon,
+        color: isDestructive
+            ? theme.colorScheme.error
+            : theme.colorScheme.onSurface,
+      ),
+      title: Text(
+        title,
+        style: theme.textTheme.titleMedium?.copyWith(
+          color: isDestructive
+              ? theme.colorScheme.error
+              : theme.colorScheme.onSurface,
         ),
       ),
-      actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(
-            'Cancel',
-            style: TextStyle(
-              color: theme.hintColor,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.group_add_rounded, size: 18),
-          label: const Text('Create Group'),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: theme.colorScheme.primary,
-            foregroundColor: theme.colorScheme.onPrimary,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          ),
-          onPressed: () {
-            if (_groupNameController.text.trim().isNotEmpty &&
-                _selectedUsersData.isNotEmpty) {
-              widget.onGroupCreated(
-                _groupNameController.text.trim(),
-                _selectedUsersData,
-              );
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text(
-                    'Please enter a group name and select at least one member.',
-                  ),
-                  backgroundColor: theme.colorScheme.error,
-                  behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  margin: const EdgeInsets.all(10),
-                ),
-              );
-            }
-          },
-        ),
-      ],
+      onTap: onTap,
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.md),
     );
   }
 }
