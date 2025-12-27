@@ -53,6 +53,12 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   String _messageSearchQuery = '';
 
+  // Reply and edit state
+  ChatMessage? _replyingTo;
+  ChatMessage? _editingMessage;
+  bool get _isReplying => _replyingTo != null;
+  bool get _isEditing => _editingMessage != null;
+
   late AnimationController _sendButtonController;
   late Animation<double> _sendButtonScale;
 
@@ -264,18 +270,49 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     if (mounted) _stopTyping();
 
     try {
-      await _firestore.collection(_messagesCollectionPath).add({
+      // Handle edit mode
+      if (_isEditing && _editingMessage?.id != null) {
+        await _firestore
+            .collection(_messagesCollectionPath)
+            .doc(_editingMessage!.id)
+            .update({
+          'message': messageText,
+          'isEdited': true,
+        });
+        setState(() => _editingMessage = null);
+        return;
+      }
+
+      // Build message data with optional reply
+      final Map<String, dynamic> messageData = {
         'message': messageText,
         'sender': widget.userId,
         'senderName': _currentUserDisplayName,
         'timestamp': FieldValue.serverTimestamp(),
         'readBy': [widget.userId],
-      });
+        'isEdited': false,
+      };
+
+      // Add reply data if replying
+      if (_isReplying && _replyingTo != null) {
+        if (_replyingTo!.id != null) {
+          messageData['replyToId'] = _replyingTo!.id!;
+        }
+        messageData['replyToMessage'] = _replyingTo!.message;
+        messageData['replyToSenderName'] = _replyingTo!.senderName;
+      }
+
+      await _firestore.collection(_messagesCollectionPath).add(messageData);
       await _firestore.doc(_chatDocumentPath).update({
         'lastMessage': messageText,
         'lastMessageTime': FieldValue.serverTimestamp(),
         'lastMessageSenderId': widget.userId,
       });
+
+      // Clear reply state
+      if (_isReplying) {
+        setState(() => _replyingTo = null);
+      }
 
       _scrollToBottom(isNewMessage: true);
     } catch (e) {
@@ -286,6 +323,267 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         _showErrorSnackBar('Failed to send message');
       }
     }
+  }
+
+  void _startReply(ChatMessage message) {
+    HapticFeedback.lightImpact();
+    setState(() {
+      _replyingTo = message;
+      _editingMessage = null;
+    });
+    _messageFocusNode.requestFocus();
+  }
+
+  void _startEdit(ChatMessage message) {
+    if (!message.canEdit) {
+      _showErrorSnackBar('Message can only be edited within 15 minutes');
+      return;
+    }
+    HapticFeedback.lightImpact();
+    setState(() {
+      _editingMessage = message;
+      _replyingTo = null;
+      _messageController.text = message.message;
+    });
+    _messageFocusNode.requestFocus();
+  }
+
+  void _cancelReplyOrEdit() {
+    setState(() {
+      _replyingTo = null;
+      _editingMessage = null;
+      if (_isEditing) _messageController.clear();
+    });
+  }
+
+  Future<void> _deleteMessage(ChatMessage message, {bool forEveryone = false}) async {
+    if (message.id == null) return;
+
+    try {
+      if (forEveryone) {
+        if (!message.canDeleteForEveryone) {
+          _showErrorSnackBar('Message can only be deleted for everyone within 1 hour');
+          return;
+        }
+        await _firestore
+            .collection(_messagesCollectionPath)
+            .doc(message.id)
+            .delete();
+      } else {
+        // For "delete for me" - we could use a deletedFor array
+        // For simplicity, just delete if it's the user's own message
+        if (message.isMe) {
+          await _firestore
+              .collection(_messagesCollectionPath)
+              .doc(message.id)
+              .delete();
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('Error deleting message: $e');
+      if (mounted) _showErrorSnackBar('Failed to delete message');
+    }
+  }
+
+  void _copyMessage(ChatMessage message) {
+    Clipboard.setData(ClipboardData(text: message.message));
+    HapticFeedback.lightImpact();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Message copied'),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.md),
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  void _showMessageActions(ChatMessage message) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return ClipRRect(
+          borderRadius: AppRadius.bottomSheetRadius,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: AppRadius.bottomSheetRadius,
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.7)
+                    : Colors.white.withValues(alpha: 0.9),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 40,
+                    height: 4,
+                    margin: const EdgeInsets.only(top: AppSpacing.md),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.onSurface.withValues(alpha: 0.3),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  // Reply
+                  _buildActionTile(
+                    icon: Icons.reply_rounded,
+                    label: 'Reply',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _startReply(message);
+                    },
+                  ),
+                  // Copy
+                  _buildActionTile(
+                    icon: Icons.copy_rounded,
+                    label: 'Copy',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _copyMessage(message);
+                    },
+                  ),
+                  // Edit (only for own messages within 15 min)
+                  if (message.canEdit)
+                    _buildActionTile(
+                      icon: Icons.edit_rounded,
+                      label: 'Edit',
+                      onTap: () {
+                        Navigator.pop(context);
+                        _startEdit(message);
+                      },
+                    ),
+                  // Delete
+                  if (message.isMe) ...[
+                    _buildActionTile(
+                      icon: Icons.delete_outline_rounded,
+                      label: message.canDeleteForEveryone
+                          ? 'Delete for everyone'
+                          : 'Delete',
+                      isDestructive: true,
+                      onTap: () {
+                        Navigator.pop(context);
+                        _showDeleteConfirmation(message);
+                      },
+                    ),
+                  ],
+                  SizedBox(
+                      height: MediaQuery.of(context).padding.bottom + AppSpacing.md),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildActionTile({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+    bool isDestructive = false,
+  }) {
+    final theme = Theme.of(context);
+    return ListTile(
+      leading: Icon(
+        icon,
+        color: isDestructive ? theme.colorScheme.error : theme.colorScheme.onSurface,
+      ),
+      title: Text(
+        label,
+        style: TextStyle(
+          color: isDestructive ? theme.colorScheme.error : null,
+        ),
+      ),
+      onTap: onTap,
+    );
+  }
+
+  void _showDeleteConfirmation(ChatMessage message) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: ClipRRect(
+            borderRadius: AppRadius.xl,
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                decoration: BoxDecoration(
+                  borderRadius: AppRadius.xl,
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.7)
+                      : Colors.white.withValues(alpha: 0.9),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.delete_outline_rounded,
+                      size: 48,
+                      color: theme.colorScheme.error,
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Text(
+                      'Delete Message?',
+                      style: theme.textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.sm),
+                    Text(
+                      'This action cannot be undone.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xl),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.md),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _deleteMessage(
+                                message,
+                                forEveryone: message.canDeleteForEveryone,
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: theme.colorScheme.error,
+                              foregroundColor: theme.colorScheme.onError,
+                            ),
+                            child: const Text('Delete'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _handleTypingChange(String text) {
@@ -697,19 +995,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             if (index >= messages.length) return const SizedBox.shrink();
 
             final messageDoc = messages[index];
-            final messageData = messageDoc.data() as Map<String, dynamic>;
-            final message = ChatMessage(
-              message: messageData['message'] ?? '',
-              sender: messageData['sender'] ?? '',
-              senderName:
-                  messageData['senderName'] ??
-                  _participantDisplayNames[messageData['sender']] ??
-                  'Unknown',
-              timestamp:
-                  (messageData['timestamp'] as Timestamp?)?.toDate() ??
-                  DateTime.now(),
-              isMe: messageData['sender'] == widget.userId,
-            );
+            final message = ChatMessage.fromFirestore(messageDoc, widget.userId);
 
             // Check if we need to show date separator
             Widget? dateSeparator;
@@ -825,123 +1111,213 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final isMe = message.isMe;
+    final hasReply = message.replyToMessage != null;
 
-    return Padding(
-      padding: EdgeInsets.only(
-        left: isMe ? 60 : AppSpacing.xs,
-        right: isMe ? AppSpacing.xs : 60,
-        bottom: AppSpacing.sm,
-      ),
-      child: Align(
-        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-        child: Column(
-          crossAxisAlignment:
-              isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-          children: [
-            if (widget.isGroupChat && !isMe)
-              Padding(
-                padding: const EdgeInsets.only(
-                  left: AppSpacing.sm,
-                  bottom: AppSpacing.xxs,
-                ),
-                child: Text(
-                  message.senderName,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: theme.colorScheme.primary,
-                    fontWeight: FontWeight.w600,
+    return GestureDetector(
+      onLongPress: () => _showMessageActions(message),
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: isMe ? 60 : AppSpacing.xs,
+          right: isMe ? AppSpacing.xs : 60,
+          bottom: AppSpacing.sm,
+        ),
+        child: Align(
+          alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+          child: Column(
+            crossAxisAlignment:
+                isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            children: [
+              if (widget.isGroupChat && !isMe)
+                Padding(
+                  padding: const EdgeInsets.only(
+                    left: AppSpacing.sm,
+                    bottom: AppSpacing.xxs,
                   ),
-                ),
-              ),
-            ClipRRect(
-              borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(20),
-                topRight: const Radius.circular(20),
-                bottomLeft: Radius.circular(isMe ? 20 : 4),
-                bottomRight: Radius.circular(isMe ? 4 : 20),
-              ),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(
-                  sigmaX: isMe ? 0 : 10,
-                  sigmaY: isMe ? 0 : 10,
-                ),
-                child: Container(
-                  constraints: BoxConstraints(
-                    maxWidth: MediaQuery.of(context).size.width * 0.75,
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.sm,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.only(
-                      topLeft: const Radius.circular(20),
-                      topRight: const Radius.circular(20),
-                      bottomLeft: Radius.circular(isMe ? 20 : 4),
-                      bottomRight: Radius.circular(isMe ? 4 : 20),
+                  child: Text(
+                    message.senderName,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w600,
                     ),
-                    gradient: isMe
-                        ? LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              theme.colorScheme.primary,
-                              theme.colorScheme.primary.withValues(alpha: 0.85),
-                              theme.colorScheme.secondary.withValues(alpha: 0.8),
-                            ],
-                          )
-                        : null,
-                    color: isMe
-                        ? null
-                        : (isDark
-                            ? Colors.white.withValues(alpha: 0.1)
-                            : Colors.white.withValues(alpha: 0.85)),
-                    border: isMe
-                        ? null
-                        : Border.all(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.1)
-                                : Colors.black.withValues(alpha: 0.05),
-                          ),
-                    boxShadow: isMe
-                        ? [
-                            BoxShadow(
-                              color: theme.colorScheme.primary
-                                  .withValues(alpha: 0.25),
-                              blurRadius: 12,
-                              offset: const Offset(0, 4),
-                            ),
-                          ]
-                        : null,
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        message.message,
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                          color: isMe
-                              ? Colors.white
-                              : theme.colorScheme.onSurface,
-                          height: 1.4,
-                        ),
+                ),
+              ClipRRect(
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(20),
+                  topRight: const Radius.circular(20),
+                  bottomLeft: Radius.circular(isMe ? 20 : 4),
+                  bottomRight: Radius.circular(isMe ? 4 : 20),
+                ),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(
+                    sigmaX: isMe ? 0 : 10,
+                    sigmaY: isMe ? 0 : 10,
+                  ),
+                  child: Container(
+                    constraints: BoxConstraints(
+                      maxWidth: MediaQuery.of(context).size.width * 0.75,
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.md,
+                      vertical: AppSpacing.sm,
+                    ),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.only(
+                        topLeft: const Radius.circular(20),
+                        topRight: const Radius.circular(20),
+                        bottomLeft: Radius.circular(isMe ? 20 : 4),
+                        bottomRight: Radius.circular(isMe ? 4 : 20),
                       ),
-                      const SizedBox(height: AppSpacing.xxs),
-                      Text(
-                        DateFormat('HH:mm').format(message.timestamp),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: (isMe ? Colors.white : theme.colorScheme.onSurface)
-                              .withValues(alpha: 0.6),
+                      gradient: isMe
+                          ? LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                theme.colorScheme.primary,
+                                theme.colorScheme.primary.withValues(alpha: 0.85),
+                                theme.colorScheme.secondary.withValues(alpha: 0.8),
+                              ],
+                            )
+                          : null,
+                      color: isMe
+                          ? null
+                          : (isDark
+                              ? Colors.white.withValues(alpha: 0.1)
+                              : Colors.white.withValues(alpha: 0.85)),
+                      border: isMe
+                          ? null
+                          : Border.all(
+                              color: isDark
+                                  ? Colors.white.withValues(alpha: 0.1)
+                                  : Colors.black.withValues(alpha: 0.05),
+                            ),
+                      boxShadow: isMe
+                          ? [
+                              BoxShadow(
+                                color: theme.colorScheme.primary
+                                    .withValues(alpha: 0.25),
+                                blurRadius: 12,
+                                offset: const Offset(0, 4),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Reply preview
+                        if (hasReply) ...[
+                          Container(
+                            padding: const EdgeInsets.all(AppSpacing.sm),
+                            margin: const EdgeInsets.only(bottom: AppSpacing.xs),
+                            decoration: BoxDecoration(
+                              color: (isMe ? Colors.white : theme.colorScheme.primary)
+                                  .withValues(alpha: 0.15),
+                              borderRadius: AppRadius.sm,
+                              border: Border(
+                                left: BorderSide(
+                                  color: isMe ? Colors.white : theme.colorScheme.primary,
+                                  width: 3,
+                                ),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  message.replyToSenderName ?? 'Unknown',
+                                  style: theme.textTheme.labelSmall?.copyWith(
+                                    color: isMe ? Colors.white : theme.colorScheme.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                Text(
+                                  message.replyToMessage ?? '',
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: (isMe ? Colors.white : theme.colorScheme.onSurface)
+                                        .withValues(alpha: 0.8),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        // Message text
+                        Text(
+                          message.message,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: isMe
+                                ? Colors.white
+                                : theme.colorScheme.onSurface,
+                            height: 1.4,
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: AppSpacing.xxs),
+                        // Time, edited label, and status
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (message.isEdited) ...[
+                              Text(
+                                'edited',
+                                style: theme.textTheme.labelSmall?.copyWith(
+                                  color: (isMe ? Colors.white : theme.colorScheme.onSurface)
+                                      .withValues(alpha: 0.5),
+                                  fontStyle: FontStyle.italic,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                            Text(
+                              DateFormat('HH:mm').format(message.timestamp),
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: (isMe ? Colors.white : theme.colorScheme.onSurface)
+                                    .withValues(alpha: 0.6),
+                              ),
+                            ),
+                            if (isMe) ...[
+                              const SizedBox(width: 4),
+                              _buildStatusIcon(message.status, isMe),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  Widget _buildStatusIcon(MessageStatus status, bool isMe) {
+    final color = isMe ? Colors.white.withValues(alpha: 0.7) : Colors.grey;
+
+    switch (status) {
+      case MessageStatus.sending:
+        return SizedBox(
+          width: 12,
+          height: 12,
+          child: CircularProgressIndicator(
+            strokeWidth: 1.5,
+            valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+        );
+      case MessageStatus.sent:
+        return Icon(Icons.check, size: 14, color: color);
+      case MessageStatus.delivered:
+        return Icon(Icons.done_all, size: 14, color: color);
+      case MessageStatus.read:
+        return Icon(Icons.done_all, size: 14, color: Colors.lightBlueAccent);
+      case MessageStatus.failed:
+        return Icon(Icons.error_outline, size: 14, color: Colors.redAccent);
+    }
   }
 
   Widget _buildMessageInput() {
@@ -955,7 +1331,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           padding: EdgeInsets.only(
             left: AppSpacing.md,
             right: AppSpacing.md,
-            top: AppSpacing.md,
+            top: AppSpacing.sm,
             bottom: MediaQuery.of(context).padding.bottom + AppSpacing.md,
           ),
           decoration: BoxDecoration(
@@ -970,83 +1346,159 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               ),
             ),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Expanded(
-                child: GlassContainer(
-                  blur: 10,
-                  opacity: isDark ? 0.15 : 0.6,
-                  borderRadius: AppRadius.xl,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.md,
-                    vertical: AppSpacing.xs,
-                  ),
-                  child: TextField(
-                    controller: _messageController,
-                    focusNode: _messageFocusNode,
-                    decoration: InputDecoration(
-                      hintText: 'Type a message...',
-                      hintStyle: TextStyle(
-                        color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-                      ),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(
-                        vertical: AppSpacing.sm,
-                      ),
-                    ),
-                    minLines: 1,
-                    maxLines: 5,
-                    textCapitalization: TextCapitalization.sentences,
-                    onChanged: _handleTypingChange,
-                    onSubmitted: (_) => _sendMessage(),
-                  ),
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              AnimatedBuilder(
-                animation: _sendButtonScale,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: _sendButtonScale.value,
-                    child: child,
-                  );
-                },
-                child: Container(
+              // Reply/Edit preview bar
+              if (_isReplying || _isEditing)
+                Container(
+                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  margin: const EdgeInsets.only(bottom: AppSpacing.sm),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        theme.colorScheme.primary,
-                        theme.colorScheme.secondary,
-                      ],
+                    color: theme.colorScheme.primary.withValues(alpha: 0.1),
+                    borderRadius: AppRadius.md,
+                    border: Border(
+                      left: BorderSide(
+                        color: _isEditing
+                            ? theme.colorScheme.secondary
+                            : theme.colorScheme.primary,
+                        width: 3,
+                      ),
                     ),
-                    borderRadius: AppRadius.xl,
-                    boxShadow: [
-                      BoxShadow(
-                        color: theme.colorScheme.primary.withValues(alpha: 0.4),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isEditing ? Icons.edit : Icons.reply,
+                        size: 18,
+                        color: _isEditing
+                            ? theme.colorScheme.secondary
+                            : theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _isEditing
+                                  ? 'Editing message'
+                                  : 'Replying to ${_replyingTo?.senderName ?? ''}',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: _isEditing
+                                    ? theme.colorScheme.secondary
+                                    : theme.colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              _isEditing
+                                  ? _editingMessage?.message ?? ''
+                                  : _replyingTo?.message ?? '',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: _cancelReplyOrEdit,
+                        icon: Icon(
+                          Icons.close,
+                          size: 18,
+                          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
                       ),
                     ],
                   ),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
+                ),
+              // Input row
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: GlassContainer(
+                      blur: 10,
+                      opacity: isDark ? 0.15 : 0.6,
                       borderRadius: AppRadius.xl,
-                      onTap: _sendMessage,
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Icon(
-                          Icons.send_rounded,
-                          color: theme.colorScheme.onPrimary,
-                          size: 22,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.md,
+                        vertical: AppSpacing.xs,
+                      ),
+                      child: TextField(
+                        controller: _messageController,
+                        focusNode: _messageFocusNode,
+                        decoration: InputDecoration(
+                          hintText: _isEditing
+                              ? 'Edit your message...'
+                              : 'Type a message...',
+                          hintStyle: TextStyle(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+                          ),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: AppSpacing.sm,
+                          ),
+                        ),
+                        minLines: 1,
+                        maxLines: 5,
+                        textCapitalization: TextCapitalization.sentences,
+                        onChanged: _handleTypingChange,
+                        onSubmitted: (_) => _sendMessage(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  AnimatedBuilder(
+                    animation: _sendButtonScale,
+                    builder: (context, child) {
+                      return Transform.scale(
+                        scale: _sendButtonScale.value,
+                        child: child,
+                      );
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            theme.colorScheme.primary,
+                            theme.colorScheme.secondary,
+                          ],
+                        ),
+                        borderRadius: AppRadius.xl,
+                        boxShadow: [
+                          BoxShadow(
+                            color: theme.colorScheme.primary.withValues(alpha: 0.4),
+                            blurRadius: 12,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: AppRadius.xl,
+                          onTap: _sendMessage,
+                          child: Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Icon(
+                              _isEditing ? Icons.check_rounded : Icons.send_rounded,
+                              color: theme.colorScheme.onPrimary,
+                              size: 22,
+                            ),
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
             ],
           ),
