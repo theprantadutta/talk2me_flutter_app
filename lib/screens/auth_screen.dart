@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -32,6 +33,16 @@ class _AuthScreenState extends State<AuthScreen> {
   // Firebase instances
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize Google Sign In with web client ID from environment
+    _googleSignIn.initialize(
+      serverClientId: dotenv.env['GOOGLE_WEB_CLIENT_ID'],
+    );
+  }
 
   @override
   void dispose() {
@@ -125,8 +136,9 @@ class _AuthScreenState extends State<AuthScreen> {
       if (mounted) _showErrorSnackBar(errorMessage);
     } catch (e) {
       if (kDebugMode) print("Login error: $e");
-      if (mounted)
+      if (mounted) {
         _showErrorSnackBar('An unexpected error occurred: ${e.toString()}');
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -209,8 +221,9 @@ class _AuthScreenState extends State<AuthScreen> {
           );
         }
       } else {
-        if (mounted)
+        if (mounted) {
           _showErrorSnackBar('Account creation failed. User not returned.');
+        }
       }
     } on FirebaseAuthException catch (e) {
       String errorMessage = 'An error occurred';
@@ -230,8 +243,9 @@ class _AuthScreenState extends State<AuthScreen> {
       if (mounted) _showErrorSnackBar(errorMessage);
     } catch (e) {
       if (kDebugMode) print("Signup error: $e");
-      if (mounted)
+      if (mounted) {
         _showErrorSnackBar('An unexpected error occurred: ${e.toString()}');
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -268,8 +282,9 @@ class _AuthScreenState extends State<AuthScreen> {
       if (mounted) _showErrorSnackBar(errorMessage);
     } catch (e) {
       if (kDebugMode) print("Reset password error: $e");
-      if (mounted)
+      if (mounted) {
         _showErrorSnackBar('An unexpected error occurred: ${e.toString()}');
+      }
     } finally {
       if (mounted) {
         setState(() => isLoading = false);
@@ -285,43 +300,49 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     try {
-      final GoogleSignInAccount? googleUser =
-          await GoogleSignIn(scopes: ['email', 'profile']).signIn();
-
-      if (googleUser == null) {
-        if (mounted) _showErrorSnackBar('Google Sign-In cancelled.');
+      // Check if platform supports authentication
+      if (!_googleSignIn.supportsAuthenticate()) {
+        if (mounted) {
+          _showErrorSnackBar('Google Sign-In is not supported on this platform.');
+        }
         return;
       }
 
-      final GoogleSignInAuthentication googleAuth =
-          await googleUser.authentication;
+      // Trigger the authentication flow
+      final GoogleSignInAccount googleUser = await _googleSignIn.authenticate();
 
-      if (googleAuth.accessToken == null || googleAuth.idToken == null) {
-        if (mounted)
-          _showErrorSnackBar(
-            'Failed to retrieve Google authentication tokens.',
-          );
+      // Obtain the auth details from the request
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+
+      // Validate ID token
+      if (googleAuth.idToken == null) {
+        if (mounted) {
+          _showErrorSnackBar('Failed to get Google ID token.');
+        }
         return;
       }
 
+      // Create a new credential using only the ID token
       final AuthCredential credential = GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
       );
 
+      // Sign in to Firebase with the Google credential
       final UserCredential userCredential = await _auth.signInWithCredential(
         credential,
       );
       final User? user = userCredential.user;
 
       if (user == null) {
-        if (mounted)
+        if (mounted) {
           _showErrorSnackBar(
             'Failed to sign in with Google. No user returned.',
           );
+        }
         return;
       }
 
+      // Create or update user profile in Firestore
       final userDocRef = _firestore.collection('users').doc(user.uid);
       final userDoc = await userDocRef.get();
 
@@ -338,6 +359,7 @@ class _AuthScreenState extends State<AuthScreen> {
           'updatedAt': FieldValue.serverTimestamp(),
           'isOnline': true,
           'lastSeen': FieldValue.serverTimestamp(),
+          'authProvider': 'google',
         });
       } else {
         await userDocRef.update({
@@ -373,10 +395,11 @@ class _AuthScreenState extends State<AuthScreen> {
       if (mounted) _showErrorSnackBar(errorMessage);
     } catch (e) {
       if (kDebugMode) print('Google Sign-In error: $e');
-      if (mounted)
+      if (mounted) {
         _showErrorSnackBar(
           'An unexpected error occurred during Google Sign-In: ${e.toString()}',
         );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -565,7 +588,7 @@ class _AuthScreenState extends State<AuthScreen> {
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
-              backgroundColor: theme.dialogBackgroundColor,
+              backgroundColor: theme.dialogTheme.backgroundColor ?? theme.colorScheme.surface,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(20),
               ),

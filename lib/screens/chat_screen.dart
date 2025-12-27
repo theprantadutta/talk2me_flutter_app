@@ -1461,7 +1461,7 @@ class _ChatScreenState extends State<ChatScreen> {
         context: context,
         builder: (BuildContext dialogContext) {
           return AlertDialog(
-            backgroundColor: theme.dialogBackgroundColor,
+            backgroundColor: theme.dialogTheme.backgroundColor ?? theme.colorScheme.surface,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
@@ -1568,8 +1568,9 @@ class _ChatScreenState extends State<ChatScreen> {
             // Only mark as read if not searching to avoid issues with filtered list
             _markMessagesAsRead();
           }
-          if (!_isSearching)
+          if (!_isSearching) {
             _scrollToBottom(); // Only auto-scroll if not searching
+          }
         });
 
         if (messages.isEmpty && _messageSearchQuery.isNotEmpty) {
