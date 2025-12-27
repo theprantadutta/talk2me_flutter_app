@@ -93,3 +93,38 @@ abstract class Validators {
     return null;
   }
 }
+
+/// Input sanitization utilities
+abstract class Sanitizer {
+  /// Remove potentially dangerous HTML/script content
+  static String sanitizeText(String input) {
+    return input
+        .replaceAll(RegExp(r'<[^>]*>'), '') // Remove HTML tags
+        .replaceAll(RegExp(r'javascript:', caseSensitive: false), '')
+        .replaceAll(RegExp(r'on\w+\s*=', caseSensitive: false), '')
+        .trim();
+  }
+
+  /// Sanitize username input
+  static String sanitizeUsername(String input) {
+    final cleaned = input
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9_]'), '');
+    return cleaned.length > 20 ? cleaned.substring(0, 20) : cleaned;
+  }
+
+  /// Sanitize search query
+  static String sanitizeSearchQuery(String input) {
+    return input
+        .replaceAll(RegExp(r'[^\w\s@.-]'), '')
+        .trim();
+  }
+
+  /// Sanitize message content
+  static String sanitizeMessage(String input) {
+    // Remove null bytes and control characters (except newlines and tabs)
+    return input
+        .replaceAll(RegExp(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]'), '')
+        .trim();
+  }
+}
