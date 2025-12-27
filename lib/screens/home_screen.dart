@@ -88,6 +88,84 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         .snapshots();
   }
 
+  // Chat action methods
+  Future<void> _togglePinChat(String chatId, bool currentlyPinned) async {
+    try {
+      await _firestore.collection('chats').doc(chatId).update({
+        'pinnedBy': currentlyPinned
+            ? FieldValue.arrayRemove([widget.currentUserId])
+            : FieldValue.arrayUnion([widget.currentUserId]),
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(currentlyPinned ? 'Chat unpinned' : 'Chat pinned'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) _showErrorSnackBar('Failed to update chat');
+    }
+  }
+
+  Future<void> _toggleMuteChat(String chatId, bool currentlyMuted) async {
+    try {
+      await _firestore.collection('chats').doc(chatId).update({
+        'mutedBy': currentlyMuted
+            ? FieldValue.arrayRemove([widget.currentUserId])
+            : FieldValue.arrayUnion([widget.currentUserId]),
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(currentlyMuted
+                ? 'Notifications enabled'
+                : 'Notifications muted'),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) _showErrorSnackBar('Failed to update chat');
+    }
+  }
+
+  Future<void> _archiveChat(String chatId) async {
+    try {
+      await _firestore.collection('chats').doc(chatId).update({
+        'archivedBy': FieldValue.arrayUnion([widget.currentUserId]),
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Chat archived'),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Undo',
+              onPressed: () => _unarchiveChat(chatId),
+            ),
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) _showErrorSnackBar('Failed to archive chat');
+    }
+  }
+
+  Future<void> _unarchiveChat(String chatId) async {
+    try {
+      await _firestore.collection('chats').doc(chatId).update({
+        'archivedBy': FieldValue.arrayRemove([widget.currentUserId]),
+      });
+    } catch (e) {
+      if (mounted) _showErrorSnackBar('Failed to restore chat');
+    }
+  }
+
   Stream<QuerySnapshot> _getUsersStream() {
     return _firestore
         .collection('users')
@@ -438,6 +516,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final theme = Theme.of(context);
     final bool isGroupChat = chatData['isGroupChat'] ?? false;
 
+    // Check pinned/muted status
+    final pinnedBy = List<String>.from(chatData['pinnedBy'] ?? []);
+    final mutedBy = List<String>.from(chatData['mutedBy'] ?? []);
+    final archivedBy = List<String>.from(chatData['archivedBy'] ?? []);
+    final isPinned = pinnedBy.contains(widget.currentUserId);
+    final isMuted = mutedBy.contains(widget.currentUserId);
+    final isArchived = archivedBy.contains(widget.currentUserId);
+
+    // Skip archived chats in main list
+    if (isArchived) return const SizedBox.shrink();
+
     String chatDisplayName;
     if (isGroupChat) {
       chatDisplayName = chatData['groupName'] ?? 'Group Chat';
@@ -462,25 +551,34 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         final unreadCount = unreadSnapshot.data ?? 0;
         final hasUnread = unreadCount > 0;
 
-        Widget tile = AnimatedContainer(
-          duration: AnimationConstants.fast,
-          margin: const EdgeInsets.only(bottom: AppSpacing.sm),
-          child: GlassCard(
-            blur: 10,
-            padding: const EdgeInsets.all(AppSpacing.md),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ChatScreen(
-                    userId: widget.currentUserId,
-                    chatId: chatId,
-                    chatName: chatDisplayName,
-                    isGroupChat: isGroupChat,
+        Widget tile = GestureDetector(
+          onLongPress: () {
+            _showChatOptions(
+              chatId: chatId,
+              chatName: chatDisplayName,
+              isPinned: isPinned,
+              isMuted: isMuted,
+            );
+          },
+          child: AnimatedContainer(
+            duration: AnimationConstants.fast,
+            margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+            child: GlassCard(
+              blur: 10,
+              padding: const EdgeInsets.all(AppSpacing.md),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ChatScreen(
+                      userId: widget.currentUserId,
+                      chatId: chatId,
+                      chatName: chatDisplayName,
+                      isGroupChat: isGroupChat,
+                    ),
                   ),
-                ),
-              );
-            },
+                );
+              },
             child: Row(
               children: [
                 // Avatar
@@ -523,6 +621,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (isPinned)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 4),
+                              child: Icon(
+                                Icons.push_pin_rounded,
+                                size: 14,
+                                color: theme.colorScheme.primary,
+                              ),
+                            ),
                           Text(
                             timeString,
                             style: theme.textTheme.bodySmall?.copyWith(
@@ -558,6 +665,15 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (isMuted)
+                            Padding(
+                              padding: const EdgeInsets.only(left: AppSpacing.xs),
+                              child: Icon(
+                                Icons.volume_off_rounded,
+                                size: 16,
+                                color: theme.colorScheme.onSurface.withValues(alpha: 0.4),
+                              ),
+                            ),
                           if (hasUnread)
                             Container(
                               margin: const EdgeInsets.only(left: AppSpacing.sm),
@@ -589,6 +705,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
               ],
             ),
+          ),
           ),
         );
 
@@ -1319,6 +1436,167 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
       onTap: onTap,
       shape: RoundedRectangleBorder(borderRadius: AppRadius.md),
+    );
+  }
+
+  void _showChatOptions({
+    required String chatId,
+    required String chatName,
+    required bool isPinned,
+    required bool isMuted,
+  }) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return ClipRRect(
+          borderRadius: AppRadius.bottomSheetRadius,
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+            child: Container(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              decoration: BoxDecoration(
+                borderRadius: AppRadius.bottomSheetRadius,
+                color: isDark
+                    ? Colors.black.withValues(alpha: 0.6)
+                    : Colors.white.withValues(alpha: 0.9),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.black.withValues(alpha: 0.05),
+                ),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Header
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          chatName,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  // Pin option
+                  _buildChatOptionItem(
+                    icon: isPinned
+                        ? Icons.push_pin_rounded
+                        : Icons.push_pin_outlined,
+                    title: isPinned ? 'Unpin Chat' : 'Pin Chat',
+                    subtitle: isPinned
+                        ? 'Remove from top of chat list'
+                        : 'Keep this chat at the top',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _togglePinChat(chatId, isPinned);
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  // Mute option
+                  _buildChatOptionItem(
+                    icon: isMuted
+                        ? Icons.volume_up_rounded
+                        : Icons.volume_off_rounded,
+                    title: isMuted ? 'Unmute Notifications' : 'Mute Notifications',
+                    subtitle: isMuted
+                        ? 'Enable notifications for this chat'
+                        : 'Stop receiving notifications',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _toggleMuteChat(chatId, isMuted);
+                    },
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  // Archive option
+                  _buildChatOptionItem(
+                    icon: Icons.archive_outlined,
+                    title: 'Archive Chat',
+                    subtitle: 'Move chat to archived folder',
+                    onTap: () {
+                      Navigator.pop(context);
+                      _archiveChat(chatId);
+                    },
+                  ),
+                  SizedBox(
+                      height: MediaQuery.of(context).padding.bottom + AppSpacing.md),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildChatOptionItem({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+    bool isDestructive = false,
+  }) {
+    final theme = Theme.of(context);
+
+    return GlassCard(
+      padding: const EdgeInsets.all(AppSpacing.md),
+      onTap: onTap,
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            decoration: BoxDecoration(
+              color: isDestructive
+                  ? theme.colorScheme.error.withValues(alpha: 0.1)
+                  : theme.colorScheme.primary.withValues(alpha: 0.1),
+              borderRadius: AppRadius.md,
+            ),
+            child: Icon(
+              icon,
+              color: isDestructive
+                  ? theme.colorScheme.error
+                  : theme.colorScheme.primary,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: isDestructive ? theme.colorScheme.error : null,
+                  ),
+                ),
+                Text(
+                  subtitle,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
