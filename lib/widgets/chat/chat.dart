@@ -2,3 +2,4 @@
 export 'chat_list_tile.dart';
 export 'message_bubble.dart';
 export 'message_input.dart';
+export 'reaction_picker.dart';

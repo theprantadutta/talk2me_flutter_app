@@ -80,6 +80,48 @@ class MediaAttachment {
   }
 }
 
+/// Message reaction model
+class MessageReaction {
+  final String emoji;
+  final List<String> userIds;
+  final List<String> userNames;
+
+  const MessageReaction({
+    required this.emoji,
+    required this.userIds,
+    this.userNames = const [],
+  });
+
+  factory MessageReaction.fromMap(String emoji, Map<String, dynamic> data) {
+    return MessageReaction(
+      emoji: emoji,
+      userIds: List<String>.from(data['userIds'] ?? []),
+      userNames: List<String>.from(data['userNames'] ?? []),
+    );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'userIds': userIds,
+      'userNames': userNames,
+    };
+  }
+
+  int get count => userIds.length;
+  bool hasUser(String userId) => userIds.contains(userId);
+}
+
+/// Available reaction emojis
+class ReactionEmojis {
+  static const List<String> all = ['👍', '❤️', '😂', '😮', '😢', '😡'];
+  static const String thumbsUp = '👍';
+  static const String heart = '❤️';
+  static const String laugh = '😂';
+  static const String wow = '😮';
+  static const String sad = '😢';
+  static const String angry = '😡';
+}
+
 class ChatMessage {
   final String? id;
   final String message;
@@ -95,6 +137,7 @@ class ChatMessage {
   final MessageStatus status;
   final MessageType messageType;
   final MediaAttachment? media;
+  final Map<String, MessageReaction> reactions;
 
   ChatMessage({
     this.id,
@@ -111,6 +154,7 @@ class ChatMessage {
     this.status = MessageStatus.sent,
     this.messageType = MessageType.text,
     this.media,
+    this.reactions = const {},
   });
 
   factory ChatMessage.fromFirestore(DocumentSnapshot doc, String currentUserId) {
@@ -144,6 +188,17 @@ class ChatMessage {
       media = MediaAttachment.fromMap(mediaData);
     }
 
+    // Parse reactions
+    Map<String, MessageReaction> reactions = {};
+    final reactionsData = data['reactions'] as Map<String, dynamic>?;
+    if (reactionsData != null) {
+      reactionsData.forEach((emoji, reactionData) {
+        if (reactionData is Map<String, dynamic>) {
+          reactions[emoji] = MessageReaction.fromMap(emoji, reactionData);
+        }
+      });
+    }
+
     return ChatMessage(
       id: doc.id,
       message: data['message'] ?? '',
@@ -159,10 +214,16 @@ class ChatMessage {
       status: status,
       messageType: messageType,
       media: media,
+      reactions: reactions,
     );
   }
 
   Map<String, dynamic> toFirestore() {
+    final reactionsMap = <String, dynamic>{};
+    reactions.forEach((emoji, reaction) {
+      reactionsMap[emoji] = reaction.toMap();
+    });
+
     return {
       'message': message,
       'sender': sender,
@@ -174,6 +235,7 @@ class ChatMessage {
       if (replyToMessage != null) 'replyToMessage': replyToMessage,
       if (replyToSenderName != null) 'replyToSenderName': replyToSenderName,
       if (media != null) 'media': media!.toMap(),
+      if (reactions.isNotEmpty) 'reactions': reactionsMap,
       'readBy': readBy,
     };
   }
@@ -193,6 +255,7 @@ class ChatMessage {
     MessageStatus? status,
     MessageType? messageType,
     MediaAttachment? media,
+    Map<String, MessageReaction>? reactions,
   }) {
     return ChatMessage(
       id: id ?? this.id,
@@ -209,7 +272,29 @@ class ChatMessage {
       status: status ?? this.status,
       messageType: messageType ?? this.messageType,
       media: media ?? this.media,
+      reactions: reactions ?? this.reactions,
     );
+  }
+
+  /// Check if message has any reactions
+  bool get hasReactions => reactions.isNotEmpty;
+
+  /// Get total reaction count
+  int get totalReactionCount {
+    return reactions.values.fold(0, (total, r) => total + r.count);
+  }
+
+  /// Check if current user has reacted with a specific emoji
+  bool hasUserReacted(String userId, String emoji) {
+    return reactions[emoji]?.hasUser(userId) ?? false;
+  }
+
+  /// Get all emojis the user has reacted with
+  List<String> getUserReactions(String userId) {
+    return reactions.entries
+        .where((e) => e.value.hasUser(userId))
+        .map((e) => e.key)
+        .toList();
   }
 
   /// Check if message is a media message
