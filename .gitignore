@@ -55,3 +55,4 @@ firebase.json
 
 # Ignoring environment variables
 *.env
+.claude/
